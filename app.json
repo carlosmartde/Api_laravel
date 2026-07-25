@@ -1,0 +1,23 @@
+{
+  "expo": {
+    "name": "Refinery Import",
+    "slug": "refinery-import-app",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "backgroundColor": "#071B2C"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#071B2C"
+      }
+    },
+    "ios": {
+      "supportsTablet": true
+    },
+    "web": {
+      "bundler": "metro"
+    }
+  }
+}
