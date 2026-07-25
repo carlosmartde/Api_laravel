@@ -1,24 +1,28 @@
-# Refinery Import
+# Palm Refinery Logistics
 
 Aplicación móvil multiplataforma creada con React Native y Expo para controlar
-importaciones de materiales y equipos destinados a una refinería.
+importaciones de materiales, equipos y materias primas destinados a una
+refinería de aceite de palma.
 
 ## Funcionalidades
 
-- Panel general de embarques, alertas y materiales pendientes de ubicar.
-- Seguimiento marítimo por buque, origen, ETA, progreso e Incoterm.
-- Control aduanal con documentos, observaciones y costos estimados.
-- Inventario interno por código, cantidad y ubicación en la refinería.
-- Detalle del embarque con línea de tiempo y destino del material.
-- Búsqueda, filtros, alertas de stock y formulario modal de recepción.
+- Dashboard de importaciones recibidas, en tránsito, en aduana y con
+  documentación pendiente.
+- Expediente permanente por número de BL/BOL.
+- Versionado de DUCA, factura comercial y packing list dentro de cada BL.
+- Carga de documentos PDF o imágenes mediante el selector del dispositivo.
+- Seguimiento por proveedor, transportista, contenedor, ETA e Incoterm.
+- Directorio de proveedores y contactos logísticos.
+- Ubicaciones internas: Refinería, Utilidades, WTP, ETP y Tank Farm.
+- Registro de tanques CPO y RPO/oleína.
 
 ## Pantallas y componentes
 
-1. **Inicio:** `ScrollView`, `View`, `Text`, `TouchableOpacity` e iconos.
-2. **Embarques:** `FlatList`, `TextInput`, `TouchableOpacity`, `View` e iconos.
-3. **Aduanas:** `ScrollView`, `Switch`, `TouchableOpacity`, `View` e iconos.
-4. **Inventario:** `FlatList`, `TextInput`, `Modal`, `Pressable` e iconos.
-5. **Detalle:** `ScrollView`, `TouchableOpacity`, `View`, `Text` e iconos.
+1. **Inicio:** dashboard y alertas logísticas.
+2. **Importaciones:** búsqueda y control de expedientes por BL.
+3. **Planta:** destinos internos y capacidades de Tank Farm.
+4. **Proveedores:** directorio de empresas y contactos.
+5. **Detalle del BL:** documentos, versiones y datos de la operación.
 
 Todos son componentes compatibles con Expo/React Native; la app excede el
 mínimo solicitado de cuatro pantallas y tres componentes por pantalla.
@@ -67,6 +71,6 @@ nombre y la configuración de Expo; `package.json` contiene las dependencias.
 
 ## Alcance académico
 
-Los datos son demostrativos y permanecen en memoria. En una siguiente versión
-se puede conectar autenticación, GPS/AIS para buques, lectura real de códigos,
-notificaciones y una base de datos.
+Los datos y contactos son demostrativos. Los archivos seleccionados permanecen
+en la sesión actual; la siguiente versión debe incorporar autenticación, base
+de datos y almacenamiento seguro para conservarlos de forma permanente.
