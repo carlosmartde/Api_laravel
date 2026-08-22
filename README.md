@@ -23,6 +23,16 @@ refinería de aceite de palma.
 3. **Planta:** destinos internos y capacidades de Tank Farm.
 4. **Proveedores:** directorio de empresas y contactos.
 5. **Detalle del BL:** documentos, versiones y datos de la operación.
+6. **Satélites NASA:** catálogo consultable de misiones activas de observación terrestre.
+7. **Detalle del satélite:** características, instrumentos y galería obtenida en vivo desde NASA Images API.
+
+## Integración con NASA
+
+El módulo de satélites consume la API pública oficial de NASA Image and Video
+Library (`https://images-api.nasa.gov`). Este servicio no requiere una clave y
+permite cargar las galerías sin exponer credenciales dentro de la aplicación.
+Si no hay conexión, el catálogo y las características siguen disponibles y la
+interfaz permite reintentar la carga de imágenes.
 
 Todos son componentes compatibles con Expo/React Native; la app excede el
 mínimo solicitado de cuatro pantallas y tres componentes por pantalla.

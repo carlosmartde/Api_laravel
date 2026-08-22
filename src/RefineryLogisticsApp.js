@@ -17,6 +17,11 @@ import {
 import { StatusBar } from "expo-status-bar";
 import { Ionicons } from "@expo/vector-icons";
 import * as DocumentPicker from "expo-document-picker";
+import {
+  NASA_SATELLITES,
+  SatelliteDetailScreen,
+  SatelliteListScreen,
+} from "./NasaSatellites";
 
 const C = {
   navy: "#071B2C",
@@ -766,11 +771,13 @@ const TABS = [
   { key: "imports", label: "BL", icon: "boat-outline", active: "boat" },
   { key: "locations", label: "Planta", icon: "location-outline", active: "location" },
   { key: "suppliers", label: "Proveedores", icon: "people-outline", active: "people" },
+  { key: "satellites", label: "NASA", icon: "planet-outline", active: "planet" },
 ];
 
 export default function RefineryLogisticsApp() {
   const [screen, setScreen] = useState("home");
   const [selected, setSelected] = useState(null);
+  const [selectedSatellite, setSelectedSatellite] = useState(null);
   const [documents, setDocuments] = useState(INITIAL_DOCUMENTS);
 
   const openImport = (item) => {
@@ -785,11 +792,25 @@ export default function RefineryLogisticsApp() {
     }));
   };
 
+  const openSatellite = (satellite) => {
+    setSelectedSatellite(satellite);
+    setScreen("satellite-detail");
+  };
+
   const content = () => {
     if (screen === "home") return <Dashboard openImport={openImport} />;
     if (screen === "imports") return <ImportsScreen openImport={openImport} />;
     if (screen === "locations") return <InventoryScreen />;
     if (screen === "suppliers") return <SuppliersScreen />;
+    if (screen === "satellites") return <SatelliteListScreen onOpenSatellite={openSatellite} />;
+    if (screen === "satellite-detail") {
+      return (
+        <SatelliteDetailScreen
+          satellite={selectedSatellite || NASA_SATELLITES[0]}
+          onBack={() => setScreen("satellites")}
+        />
+      );
+    }
     return (
       <ImportDetail
         item={selected || IMPORTS[0]}
@@ -804,7 +825,7 @@ export default function RefineryLogisticsApp() {
     <SafeAreaView style={s.app}>
       <StatusBar style="dark" />
       <View style={s.flex}>{content()}</View>
-      {screen !== "detail" ? (
+      {screen !== "detail" && screen !== "satellite-detail" ? (
         <View style={s.tabBar}>
           {TABS.map((tab) => {
             const isActive = screen === tab.key;
