@@ -3,8 +3,10 @@
 namespace Database\Seeders;
 
 use App\Models\Importacion;
+use App\Models\User;
 use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
+use Illuminate\Support\Facades\Hash;
 
 class DatabaseSeeder extends Seeder
 {
@@ -15,6 +17,15 @@ class DatabaseSeeder extends Seeder
      */
     public function run(): void
     {
+        User::query()->firstOrCreate(
+            ['email' => 'admin@refineryimport.test'],
+            [
+                'name' => 'Administrador de Refinería',
+                'password' => Hash::make('Refinery2026!'),
+                'email_verified_at' => now(),
+            ],
+        );
+
         $importaciones = [
             [
                 'bl' => 'MAEU-254781963',
