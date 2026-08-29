@@ -1,86 +1,136 @@
-# Palm Refinery Logistics
+# Refinery Import API
 
-Aplicación móvil multiplataforma creada con React Native y Expo para controlar
-importaciones de materiales, equipos y materias primas destinados a una
-refinería de aceite de palma.
+API REST desarrollada con Laravel para administrar las importaciones de una
+refinería de aceite de palma. El proyecto conserva el contexto de la aplicación
+móvil `RefineryImportApp`: cada expediente se identifica mediante su número de
+BL/BOL y registra proveedor, material, transporte, aduana y destino en planta.
 
-## Funcionalidades
+El CRUD se expone exclusivamente desde `routes/api.php`. La aplicación no
+registra ni utiliza `routes/web.php`.
 
-- Dashboard de importaciones recibidas, en tránsito, en aduana y con
-  documentación pendiente.
-- Expediente permanente por número de BL/BOL.
-- Versionado de DUCA, factura comercial y packing list dentro de cada BL.
-- Carga de documentos PDF o imágenes mediante el selector del dispositivo.
-- Seguimiento por proveedor, transportista, contenedor, ETA e Incoterm.
-- Directorio de proveedores y contactos logísticos.
-- Ubicaciones internas: Refinería, Utilidades, WTP, ETP y Tank Farm.
-- Registro de tanques CPO y RPO/oleína.
+## Requisitos
 
-## Pantallas y componentes
+- PHP 8.3 o superior.
+- Composer.
+- Extensión PDO SQLite habilitada.
+- Postman para consumir y demostrar los endpoints.
 
-1. **Inicio:** dashboard y alertas logísticas.
-2. **Importaciones:** búsqueda y control de expedientes por BL.
-3. **Planta:** destinos internos y capacidades de Tank Farm.
-4. **Proveedores:** directorio de empresas y contactos.
-5. **Detalle del BL:** documentos, versiones y datos de la operación.
-6. **Satélites NASA:** catálogo consultable de misiones activas de observación terrestre.
-7. **Detalle del satélite:** características, instrumentos y galería obtenida en vivo desde NASA Images API.
+## Instalación
 
-## Integración con NASA
-
-El módulo de satélites consume la API pública oficial de NASA Image and Video
-Library (`https://images-api.nasa.gov`). Este servicio no requiere una clave y
-permite cargar las galerías sin exponer credenciales dentro de la aplicación.
-Si no hay conexión, el catálogo y las características siguen disponibles y la
-interfaz permite reintentar la carga de imágenes.
-
-Todos son componentes compatibles con Expo/React Native; la app excede el
-mínimo solicitado de cuatro pantallas y tres componentes por pantalla.
-
-## Lo que necesitas instalar
-
-1. Node.js LTS 20.19 o posterior: <https://nodejs.org/>
-2. Visual Studio Code: <https://code.visualstudio.com/>
-3. En tu teléfono, la aplicación **Expo Go** desde Google Play o App Store.
-
-## Cómo ejecutar el proyecto
-
-Abre PowerShell dentro de esta carpeta y ejecuta:
+Desde PowerShell, dentro de esta carpeta:
 
 ```powershell
-npm install
-npx expo start
+composer install
+Copy-Item .env.example .env
+php artisan key:generate
+New-Item database\database.sqlite -ItemType File -Force
+php artisan migrate:fresh --seed
+php artisan serve
 ```
 
-Cuando aparezca el código QR:
+La API quedará disponible en `http://127.0.0.1:8000/api`. La base de datos usa
+SQLite y el seeder carga cinco importaciones tomadas del proyecto original.
 
-- Android: abre Expo Go y selecciona **Scan QR code**.
-- iPhone: escanea el QR con la cámara.
-- Computadora: presiona `w` en la terminal para abrir la versión web.
-
-El teléfono y la computadora deben estar conectados a la misma red Wi-Fi. Si
-la red bloquea la conexión, ejecuta:
+Si el proyecto ya está configurado, basta con ejecutar:
 
 ```powershell
-npx expo start --tunnel
+php artisan migrate:fresh --seed
+php artisan serve
 ```
 
-## Qué archivo se modifica
+## Endpoints del CRUD
 
-La interfaz y los datos de ejemplo están en `App.js`. `app.json` contiene el
-nombre y la configuración de Expo; `package.json` contiene las dependencias.
+| Método | Endpoint | Acción | Respuesta correcta |
+|---|---|---|---|
+| GET | `/api/importaciones` | Listar importaciones | 200 |
+| GET | `/api/importaciones/{id}` | Consultar una importación | 200 |
+| POST | `/api/importaciones` | Crear una importación | 201 |
+| PUT/PATCH | `/api/importaciones/{id}` | Actualizar una importación | 200 |
+| DELETE | `/api/importaciones/{id}` | Eliminar una importación | 200 |
+
+El listado también acepta filtros opcionales:
+
+```text
+GET /api/importaciones?estado=En%20tránsito
+GET /api/importaciones?buscar=ALFA
+GET /api/importaciones?estado=Recibida&buscar=VEOLIA
+```
+
+## JSON para crear una importación
+
+En Postman selecciona `Body > raw > JSON` y usa:
+
+```json
+{
+  "bl": "MSCU-202608001",
+  "referencia": "IMP-2026-030",
+  "proveedor": "GEA WESTFALIA",
+  "material": "Centrífuga para refinación",
+  "transportista": "MSC",
+  "origen": "Hamburgo, Alemania",
+  "puerto_destino": "Puerto Santo Tomás",
+  "incoterm": "CIF Puerto Santo Tomás",
+  "fecha_estimada_arribo": "2026-09-15",
+  "estado": "En tránsito",
+  "progreso": 35,
+  "contenedor": "MSCU 202608-1",
+  "bultos": "4 cajas / 2,450 kg",
+  "destino_planta": "Edificio de Refinería · Almacén técnico",
+  "duca": "En preparación",
+  "factura": "GEA-2026-882",
+  "valor_usd": 175500.75
+}
+```
+
+Valores válidos para `estado`: `Documentación`, `En tránsito`, `En altamar`,
+`Proceso aduanal` y `Recibida`. El progreso debe ser un entero entre 0 y 100.
+
+## Pruebas con Postman
+
+1. Inicia Laravel con `php artisan serve`.
+2. En Postman selecciona `Import`.
+3. Importa `postman/Refinery-Import-API.postman_collection.json`.
+4. Abre la colección `Refinery Import API` y confirma que la variable
+   `base_url` sea `http://127.0.0.1:8000`.
+5. Ejecuta las solicitudes en orden: listar, crear, consultar, actualizar y
+   eliminar. La solicitud de creación guarda automáticamente el ID para las
+   tres solicitudes siguientes.
+
+Todas las solicitudes ya incluyen los encabezados `Accept: application/json`
+y `Content-Type: application/json`.
 
 ## Guion breve para presentar
 
-> Refinery Import centraliza el proceso desde la compra internacional hasta la
-> ubicación física del material dentro de la refinería. Permite visualizar el
-> flete marítimo, el Incoterm, el avance aduanal, los documentos, los costos de
-> importación y la trazabilidad interna del inventario. Fue desarrollada con
-> React Native y Expo, por lo que funciona en Android, iOS y web desde una misma
-> base de código.
+1. Mostrar `routes/api.php` y explicar `Route::apiResource`.
+2. Ejecutar `php artisan route:list --path=api` para enseñar los cinco tipos de
+   operaciones CRUD expuestos por API.
+3. En Postman, ejecutar `Listar importaciones` y mostrar los datos iniciales.
+4. Ejecutar `Crear importación` y señalar el código HTTP 201.
+5. Ejecutar `Consultar importación creada`.
+6. Ejecutar `Actualizar importación creada` y verificar estado `Recibida` y
+   progreso 100.
+7. Ejecutar `Eliminar importación creada`.
+8. Volver a listar para comprobar que el registro fue eliminado.
 
-## Alcance académico
+## Estructura principal
 
-Los datos y contactos son demostrativos. Los archivos seleccionados permanecen
-en la sesión actual; la siguiente versión debe incorporar autenticación, base
-de datos y almacenamiento seguro para conservarlos de forma permanente.
+```text
+app/Http/Controllers/Api/ImportacionController.php
+app/Http/Requests/GuardarImportacionRequest.php
+app/Http/Resources/ImportacionResource.php
+app/Models/Importacion.php
+database/migrations/2026_08_21_000000_create_importaciones_table.php
+database/seeders/DatabaseSeeder.php
+routes/api.php
+tests/Feature/ImportacionApiTest.php
+postman/Refinery-Import-API.postman_collection.json
+```
+
+## Pruebas automatizadas
+
+```powershell
+php artisan test
+```
+
+Las pruebas verifican listado con filtros, creación, validación, consulta,
+actualización y eliminación.
