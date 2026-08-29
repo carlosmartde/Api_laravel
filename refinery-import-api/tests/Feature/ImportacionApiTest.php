@@ -3,7 +3,11 @@
 namespace Tests\Feature;
 
 use App\Models\Importacion;
+use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Hash;
+use Laravel\Passport\ClientRepository;
+use Laravel\Passport\Passport;
 use Tests\TestCase;
 
 class ImportacionApiTest extends TestCase
@@ -12,6 +16,7 @@ class ImportacionApiTest extends TestCase
 
     public function test_puede_listar_y_filtrar_importaciones(): void
     {
+        $this->autenticarUsuario();
         Importacion::factory()->create(['estado' => 'Recibida', 'proveedor' => 'ALFA LAVAL']);
         Importacion::factory()->create(['estado' => 'En tránsito', 'proveedor' => 'SIEMENS']);
 
@@ -23,6 +28,8 @@ class ImportacionApiTest extends TestCase
 
     public function test_puede_crear_una_importacion(): void
     {
+        $this->autenticarUsuario();
+
         $this->postJson('/api/importaciones', $this->datosValidos())
             ->assertCreated()
             ->assertJsonPath('data.bl', 'TEST-123456789')
@@ -36,6 +43,8 @@ class ImportacionApiTest extends TestCase
 
     public function test_rechaza_datos_invalidos(): void
     {
+        $this->autenticarUsuario();
+
         $this->postJson('/api/importaciones', [
             'bl' => '',
             'progreso' => 120,
@@ -47,6 +56,7 @@ class ImportacionApiTest extends TestCase
 
     public function test_puede_consultar_actualizar_y_eliminar_una_importacion(): void
     {
+        $this->autenticarUsuario();
         $importacion = Importacion::factory()->create();
 
         $this->getJson("/api/importaciones/{$importacion->id}")
@@ -66,6 +76,43 @@ class ImportacionApiTest extends TestCase
             ->assertJsonPath('mensaje', 'Importación eliminada correctamente.');
 
         $this->assertDatabaseMissing('importaciones', ['id' => $importacion->id]);
+    }
+
+    public function test_el_crud_requiere_un_token_bearer_valido(): void
+    {
+        $this->getJson('/api/importaciones')
+            ->assertUnauthorized();
+    }
+
+    public function test_login_generates_a_passport_access_token(): void
+    {
+        app(ClientRepository::class)->createPersonalAccessGrantClient('Cliente de pruebas', 'users');
+
+        $usuario = User::factory()->create([
+            'email' => 'admin@refineryimport.test',
+            'password' => Hash::make('Refinery2026!'),
+        ]);
+
+        $this->postJson('/api/login', [
+            'email' => $usuario->email,
+            'password' => 'Refinery2026!',
+            'nombre_token' => 'Prueba automatizada',
+        ])
+            ->assertOk()
+            ->assertJsonPath('token_type', 'Bearer')
+            ->assertJsonPath('usuario.email', $usuario->email)
+            ->assertJsonStructure(['access_token']);
+
+        $this->assertDatabaseCount('oauth_access_tokens', 1);
+    }
+
+    private function autenticarUsuario(): User
+    {
+        $usuario = User::factory()->create();
+
+        Passport::actingAs($usuario);
+
+        return $usuario;
     }
 
     private function datosValidos(): array

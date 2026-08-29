@@ -2,36 +2,24 @@
   "info": {
     "_postman_id": "7cda9972-0ef1-4fa2-a24a-95739f6fdccb",
     "name": "Refinery Import API",
-    "description": "CRUD por rutas API para las importaciones de una refinería de aceite de palma.",
+    "description": "CRUD protegido con tokens Bearer generados por Laravel Passport.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "item": [
     {
-      "name": "1. Listar importaciones",
-      "request": {
-        "method": "GET",
-        "header": [
-          { "key": "Accept", "value": "application/json" }
-        ],
-        "url": "{{base_url}}/api/importaciones",
-        "description": "Obtiene todos los expedientes. Acepta los parámetros buscar y estado."
-      },
-      "response": []
-    },
-    {
-      "name": "2. Crear importación",
+      "name": "1. Obtener token Passport",
       "event": [
         {
           "listen": "test",
           "script": {
+            "type": "text/javascript",
             "exec": [
-              "pm.test('Estado HTTP 201', function () {",
-              "    pm.response.to.have.status(201);",
+              "pm.test('Estado HTTP 200', function () {",
+              "    pm.response.to.have.status(200);",
               "});",
               "const respuesta = pm.response.json();",
-              "pm.collectionVariables.set('importacion_id', respuesta.data.id);"
-            ],
-            "type": "text/javascript"
+              "pm.collectionVariables.set('access_token', respuesta.access_token);"
+            ]
           }
         }
       ],
@@ -43,6 +31,64 @@
         ],
         "body": {
           "mode": "raw",
+          "raw": "{\n  \"email\": \"admin@refineryimport.test\",\n  \"password\": \"Refinery2026!\",\n  \"nombre_token\": \"Postman Refinery Import\"\n}"
+        },
+        "url": "{{base_url}}/api/login",
+        "description": "Valida las credenciales y guarda el access_token de Passport para las solicitudes siguientes."
+      },
+      "response": []
+    },
+    {
+      "name": "2. Ver usuario autenticado",
+      "request": {
+        "method": "GET",
+        "header": [
+          { "key": "Accept", "value": "application/json" },
+          { "key": "Authorization", "value": "Bearer {{access_token}}" }
+        ],
+        "url": "{{base_url}}/api/usuario"
+      },
+      "response": []
+    },
+    {
+      "name": "3. Listar importaciones",
+      "request": {
+        "method": "GET",
+        "header": [
+          { "key": "Accept", "value": "application/json" },
+          { "key": "Authorization", "value": "Bearer {{access_token}}" }
+        ],
+        "url": "{{base_url}}/api/importaciones",
+        "description": "Obtiene todos los expedientes. Acepta los parámetros buscar y estado."
+      },
+      "response": []
+    },
+    {
+      "name": "4. Crear importación",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Estado HTTP 201', function () {",
+              "    pm.response.to.have.status(201);",
+              "});",
+              "const respuesta = pm.response.json();",
+              "pm.collectionVariables.set('importacion_id', respuesta.data.id);"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Accept", "value": "application/json" },
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Authorization", "value": "Bearer {{access_token}}" }
+        ],
+        "body": {
+          "mode": "raw",
           "raw": "{\n  \"bl\": \"MSCU-202608001\",\n  \"referencia\": \"IMP-2026-030\",\n  \"proveedor\": \"GEA WESTFALIA\",\n  \"material\": \"Centrífuga para refinación\",\n  \"transportista\": \"MSC\",\n  \"origen\": \"Hamburgo, Alemania\",\n  \"puerto_destino\": \"Puerto Santo Tomás\",\n  \"incoterm\": \"CIF Puerto Santo Tomás\",\n  \"fecha_estimada_arribo\": \"2026-09-15\",\n  \"estado\": \"En tránsito\",\n  \"progreso\": 35,\n  \"contenedor\": \"MSCU 202608-1\",\n  \"bultos\": \"4 cajas / 2,450 kg\",\n  \"destino_planta\": \"Edificio de Refinería · Almacén técnico\",\n  \"duca\": \"En preparación\",\n  \"factura\": \"GEA-2026-882\",\n  \"valor_usd\": 175500.75\n}"
         },
         "url": "{{base_url}}/api/importaciones",
@@ -51,23 +97,25 @@
       "response": []
     },
     {
-      "name": "3. Consultar importación creada",
+      "name": "5. Consultar importación creada",
       "request": {
         "method": "GET",
         "header": [
-          { "key": "Accept", "value": "application/json" }
+          { "key": "Accept", "value": "application/json" },
+          { "key": "Authorization", "value": "Bearer {{access_token}}" }
         ],
         "url": "{{base_url}}/api/importaciones/{{importacion_id}}"
       },
       "response": []
     },
     {
-      "name": "4. Actualizar importación creada",
+      "name": "6. Actualizar importación creada",
       "request": {
         "method": "PATCH",
         "header": [
           { "key": "Accept", "value": "application/json" },
-          { "key": "Content-Type", "value": "application/json" }
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Authorization", "value": "Bearer {{access_token}}" }
         ],
         "body": {
           "mode": "raw",
@@ -78,36 +126,34 @@
       "response": []
     },
     {
-      "name": "5. Eliminar importación creada",
+      "name": "7. Eliminar importación creada",
       "request": {
         "method": "DELETE",
         "header": [
-          { "key": "Accept", "value": "application/json" }
+          { "key": "Accept", "value": "application/json" },
+          { "key": "Authorization", "value": "Bearer {{access_token}}" }
         ],
         "url": "{{base_url}}/api/importaciones/{{importacion_id}}"
       },
       "response": []
     },
     {
-      "name": "6. Probar validación (422)",
+      "name": "8. Cerrar sesión y revocar token",
       "request": {
         "method": "POST",
         "header": [
           { "key": "Accept", "value": "application/json" },
-          { "key": "Content-Type", "value": "application/json" }
+          { "key": "Authorization", "value": "Bearer {{access_token}}" }
         ],
-        "body": {
-          "mode": "raw",
-          "raw": "{\n  \"bl\": \"\",\n  \"estado\": \"Estado inválido\",\n  \"progreso\": 150\n}"
-        },
-        "url": "{{base_url}}/api/importaciones",
-        "description": "Demuestra las respuestas JSON de validación con código HTTP 422."
+        "url": "{{base_url}}/api/logout",
+        "description": "Revoca el token que se utilizó para la demostración."
       },
       "response": []
     }
   ],
   "variable": [
     { "key": "base_url", "value": "http://127.0.0.1:8000", "type": "string" },
+    { "key": "access_token", "value": "", "type": "string" },
     { "key": "importacion_id", "value": "1", "type": "string" }
   ]
 }
