@@ -84,9 +84,39 @@ class ImportacionApiTest extends TestCase
             ->assertUnauthorized();
     }
 
-    public function test_login_generates_a_passport_access_token(): void
+    public function test_client_credentials_puede_consumir_el_endpoint_de_servicio(): void
     {
-        app(ClientRepository::class)->createPersonalAccessGrantClient('Cliente de pruebas', 'users');
+        $cliente = app(ClientRepository::class)
+            ->createClientCredentialsGrantClient('Cliente de servicio para pruebas');
+
+        $respuestaToken = $this->post('/oauth/token', [
+            'grant_type' => 'client_credentials',
+            'client_id' => $cliente->id,
+            'client_secret' => $cliente->plainSecret,
+            'scope' => 'importaciones.read',
+        ], [
+            'Accept' => 'application/json',
+        ]);
+
+        $respuestaToken
+            ->assertOk()
+            ->assertJsonStructure(['token_type', 'expires_in', 'access_token']);
+
+        $this->withToken($respuestaToken->json('access_token'))
+            ->getJson('/api/servicio/importaciones')
+            ->assertOk()
+            ->assertJsonStructure(['data']);
+    }
+
+    public function test_password_grant_permite_login_refresh_y_logout(): void
+    {
+        $cliente = app(ClientRepository::class)
+            ->createPasswordGrantClient('Cliente password de pruebas', 'users', true);
+
+        config([
+            'services.passport.password_client_id' => $cliente->id,
+            'services.passport.password_client_secret' => $cliente->plainSecret,
+        ]);
 
         $usuario = User::factory()->create([
             'email' => 'admin@refineryimport.test',
@@ -96,21 +126,98 @@ class ImportacionApiTest extends TestCase
         $this->postJson('/api/login', [
             'email' => $usuario->email,
             'password' => 'Refinery2026!',
-            'nombre_token' => 'Prueba automatizada',
+            'scopes' => ['importaciones.read'],
         ])
             ->assertOk()
             ->assertJsonPath('token_type', 'Bearer')
-            ->assertJsonPath('usuario.email', $usuario->email)
-            ->assertJsonStructure(['access_token']);
+            ->assertJsonStructure(['access_token', 'refresh_token', 'expires_in']);
 
-        $this->assertDatabaseCount('oauth_access_tokens', 1);
+        $respuestaLogin = $this->postJson('/api/login', [
+            'email' => $usuario->email,
+            'password' => 'Refinery2026!',
+            'scopes' => ['importaciones.read'],
+        ])->assertOk();
+
+        $respuestaRefresh = $this->post('/oauth/token', [
+            'grant_type' => 'refresh_token',
+            'refresh_token' => $respuestaLogin->json('refresh_token'),
+            'client_id' => $cliente->id,
+            'client_secret' => $cliente->plainSecret,
+            'scope' => 'importaciones.read',
+        ], [
+            'Accept' => 'application/json',
+        ]);
+
+        $respuestaRefresh
+            ->assertOk()
+            ->assertJsonStructure(['access_token', 'refresh_token', 'expires_in']);
+
+        $this->withToken($respuestaRefresh->json('access_token'))
+            ->getJson('/api/me')
+            ->assertOk()
+            ->assertJsonPath('usuario.email', $usuario->email);
+
+        $this->withToken($respuestaRefresh->json('access_token'))
+            ->postJson('/api/logout')
+            ->assertOk();
+
+        $this->assertDatabaseHas('oauth_access_tokens', ['revoked' => true]);
+        $this->assertDatabaseHas('oauth_refresh_tokens', ['revoked' => true]);
+    }
+
+    public function test_scopes_permiten_lectura_y_denegan_escritura_y_eliminacion(): void
+    {
+        $cliente = app(ClientRepository::class)
+            ->createPasswordGrantClient('Cliente de scopes para pruebas', 'users', true);
+
+        config([
+            'services.passport.password_client_id' => $cliente->id,
+            'services.passport.password_client_secret' => $cliente->plainSecret,
+        ]);
+
+        $usuario = User::factory()->create([
+            'email' => 'lector@refineryimport.test',
+            'password' => Hash::make('Refinery2026!'),
+        ]);
+
+        $respuestaLogin = $this->postJson('/api/login', [
+            'email' => $usuario->email,
+            'password' => 'Refinery2026!',
+            'scopes' => ['importaciones.read'],
+        ])->assertOk();
+
+        $token = $respuestaLogin->json('access_token');
+        $importacion = Importacion::factory()->create();
+
+        $this->withToken($token)
+            ->getJson('/api/importaciones')
+            ->assertOk();
+
+        $this->withToken($token)
+            ->postJson('/api/importaciones', $this->datosValidos())
+            ->assertForbidden();
+
+        $this->withToken($token)
+            ->deleteJson("/api/importaciones/{$importacion->id}")
+            ->assertForbidden();
+    }
+
+    public function test_login_rechaza_scopes_no_definidos(): void
+    {
+        $this->postJson('/api/login', [
+            'email' => 'usuario@ejemplo.com',
+            'password' => 'secreto',
+            'scopes' => ['importaciones.inexistente'],
+        ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['scopes.0']);
     }
 
     private function autenticarUsuario(): User
     {
         $usuario = User::factory()->create();
 
-        Passport::actingAs($usuario);
+        Passport::actingAs($usuario, ['*']);
 
         return $usuario;
     }

@@ -27,7 +27,8 @@ php artisan key:generate
 New-Item database\database.sqlite -ItemType File -Force
 php artisan migrate:fresh --seed
 php artisan passport:keys
-php artisan passport:client --personal --name="Postman Refinery Import"
+php artisan passport:client --client --name="Refinery Import Service"
+php artisan passport:client --password --name="Refinery Import Password Client" --provider=users
 php artisan serve
 ```
 
@@ -40,43 +41,102 @@ Si el proyecto ya está configurado, basta con ejecutar:
 ```powershell
 php artisan migrate:fresh --seed
 php artisan passport:keys
-php artisan passport:client --personal --name="Postman Refinery Import"
+php artisan passport:client --client --name="Refinery Import Service"
+php artisan passport:client --password --name="Refinery Import Password Client" --provider=users
 php artisan serve
 ```
 
-## Autenticación con Laravel Passport
+Guarda los identificadores y secretos generados en `.env`:
 
-Passport genera claves RSA locales (`oauth-private.key` y `oauth-public.key`)
-y conserva los clientes y tokens en las tablas `oauth_*`. Las claves privadas
-no se guardan en Git.
-
-Para la demostración se usa un cliente de acceso personal creado con:
-
-```powershell
-php artisan passport:client --personal --name="Postman Refinery Import"
+```dotenv
+PASSPORT_CLIENT_ID=
+PASSPORT_CLIENT_SECRET=
+PASSPORT_PASSWORD_CLIENT_ID=
+PASSPORT_PASSWORD_CLIENT_SECRET=
 ```
 
-Las credenciales del usuario demostrativo son:
+El primer par se usa en Postman para Client Credentials. La aplicación utiliza
+el segundo par para el login Password Grant. `.env` y las claves privadas están
+excluidos de Git.
+
+## Guía 1: Client Credentials
+
+Passport genera claves RSA locales (`oauth-private.key` y `oauth-public.key`)
+y conserva los clientes y tokens en las tablas `oauth_*`.
+
+El cliente máquina-a-máquina obtiene su token con:
+
+```text
+POST /oauth/token
+grant_type=client_credentials
+client_id=PASSPORT_CLIENT_ID
+client_secret=PASSPORT_CLIENT_SECRET
+scope=importaciones.read
+```
+
+El token puede consultar `GET /api/servicio/importaciones`. Esa ruta utiliza el
+middleware `client` de Passport y no representa a un usuario.
+
+## Guía 2: Password Grant, refresh y logout
+
+El endpoint `POST /api/login` valida al usuario mediante Password Grant y
+devuelve `access_token`, `refresh_token` y `expires_in`. El access token dura
+una hora y el refresh token treinta días.
+
+Las credenciales demostrativas son:
 
 | Campo | Valor |
 |---|---|
 | Correo | `admin@refineryimport.test` |
 | Contraseña | `Refinery2026!` |
 
-Genera un token con `POST /api/login`. La respuesta contiene
-`access_token`; envíalo en cada solicitud protegida como:
+Envía el access token en cada solicitud protegida:
 
 ```text
 Authorization: Bearer TU_ACCESS_TOKEN
 ```
 
-El endpoint `POST /api/logout` revoca el token usado en la solicitud.
+Renueva la sesión mediante `POST /oauth/token` con
+`grant_type=refresh_token`. El endpoint `POST /api/logout` revoca el access
+token y su refresh token asociado.
+
+## Guía 3: scopes
+
+El login acepta un arreglo opcional `scopes`. Si se omite, asigna
+`importaciones.read`:
+
+```json
+{
+  "email": "admin@refineryimport.test",
+  "password": "Refinery2026!",
+  "scopes": [
+    "importaciones.read",
+    "importaciones.write",
+    "importaciones.delete"
+  ]
+}
+```
+
+Scopes disponibles:
+
+| Scope | Permiso |
+|---|---|
+| `importaciones.read` | Listar y consultar importaciones |
+| `importaciones.write` | Crear y actualizar importaciones |
+| `importaciones.delete` | Eliminar importaciones |
+| `admin` | Acceso a todas las operaciones |
+
+Las rutas verifican sus scopes con los middleware de Passport. La eliminación
+también comprueba `tokenCan()` dentro del controlador.
 
 ## Endpoints
 
 | Método | Endpoint | Acción | Respuesta correcta |
 |---|---|---|---|
-| POST | `/api/login` | Generar token Passport | 200 |
+| POST | `/oauth/token` | Emitir o renovar tokens OAuth | 200 |
+| GET | `/api/servicio/importaciones` | Listar mediante Client Credentials | 200 |
+| POST | `/api/login` | Login Password Grant con scopes | 200 |
+| GET | `/api/me` | Confirmar token y usuario autenticado | 200 |
 | GET | `/api/usuario` | Confirmar token y usuario autenticado | 200 |
 | GET | `/api/importaciones` | Listar importaciones | 200 |
 | GET | `/api/importaciones/{id}` | Consultar una importación | 200 |
@@ -85,8 +145,9 @@ El endpoint `POST /api/logout` revoca el token usado en la solicitud.
 | DELETE | `/api/importaciones/{id}` | Eliminar una importación | 200 |
 | POST | `/api/logout` | Revocar el token actual | 200 |
 
-Excepto `/api/login`, todos los endpoints de la tabla están protegidos con el
-middleware `auth:api` y devuelven 401 si no reciben un token Bearer válido.
+El CRUD exige `auth:api` y el scope correspondiente. Un token ausente o inválido
+recibe 401; un token válido sin el permiso requerido recibe 403. El endpoint de
+servicio utiliza el middleware `client` y exige `importaciones.read`.
 
 El listado también acepta filtros opcionales:
 
@@ -132,32 +193,27 @@ Valores válidos para `estado`: `Documentación`, `En tránsito`, `En altamar`,
 3. Importa `postman/Refinery-Import-API.postman_collection.json`.
 4. Abre la colección `Refinery Import API` y confirma que la variable
    `base_url` sea `http://127.0.0.1:8000`.
-5. Ejecuta primero `1. Obtener token Passport`. La colección guarda
-   automáticamente la respuesta en la variable `access_token`.
-6. Ejecuta las solicitudes restantes en orden: usuario autenticado, listar,
-   crear, consultar, actualizar, eliminar y cerrar sesión. La creación guarda
-   automáticamente el ID para las tres solicitudes siguientes.
+5. Copia en las variables de la colección los identificadores y secretos de los
+   clientes creados durante la instalación.
+6. Ejecuta la carpeta `Guía 1 - Client Credentials`.
+7. Ejecuta `Guías 2 y 3 - Login con usuario y scopes`. La colección guarda
+   automáticamente `access_token` y `refresh_token`.
+8. Prueba la renovación, el CRUD y el logout.
+9. Ejecuta la carpeta `Guía 3 - Comprobar token de solo lectura` para comprobar
+   una respuesta 200 al leer y 403 al eliminar.
 
 Todas las solicitudes protegidas ya incluyen `Authorization: Bearer
 {{access_token}}`; no es necesario copiar el token manualmente.
 
 ## Guion breve para presentar
 
-1. Mostrar `config/auth.php`, el trait `HasApiTokens` en `User` y
-   `routes/api.php` con `auth:api`.
-2. Ejecutar `php artisan route:list --path=api` para mostrar las rutas de
-   inicio de sesión, token y CRUD protegido.
-3. En Postman, ejecutar `Obtener token Passport` y enseñar el
-   `access_token` devuelto.
-4. Ejecutar `Ver usuario autenticado` para demostrar que el Bearer token es
-   válido.
-5. Ejecutar `Listar importaciones` y mostrar los datos iniciales.
-6. Ejecutar `Crear importación` y señalar el código HTTP 201.
-7. Ejecutar `Consultar importación creada`.
-8. Ejecutar `Actualizar importación creada` y verificar estado `Recibida` y
-   progreso 100.
-9. Ejecutar `Eliminar importación creada`.
-10. Ejecutar `Cerrar sesión y revocar token`.
+1. Obtener un token Client Credentials y consultar el endpoint de servicio.
+2. Iniciar sesión con Password Grant y mostrar access y refresh token.
+3. Renovar el access token sin reenviar la contraseña.
+4. Consultar `/api/me` y ejecutar el CRUD con los tres scopes.
+5. Iniciar sesión con solo `importaciones.read`.
+6. Mostrar que GET responde 200 y DELETE responde 403.
+7. Cerrar sesión y comprobar la revocación.
 
 ## Estructura principal
 
@@ -182,6 +238,5 @@ postman/Refinery-Import-API.postman_collection.json
 php artisan test
 ```
 
-Las pruebas verifican el requisito de token, la generación de un token Passport,
-el listado con filtros, creación, validación, consulta, actualización y
-eliminación.
+Las pruebas verifican Client Credentials, Password Grant, refresh, logout,
+scopes, respuestas 403 y el CRUD completo.

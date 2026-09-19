@@ -64,8 +64,15 @@ class ImportacionController extends Controller
         ]);
     }
 
-    public function destroy(Importacion $importacion): JsonResponse
+    public function destroy(Request $request, Importacion $importacion): JsonResponse
     {
+        if (! $request->user()->tokenCan('admin')
+            && ! $request->user()->tokenCan('importaciones.delete')) {
+            return response()->json([
+                'mensaje' => 'No tienes permiso para eliminar importaciones.',
+            ], 403);
+        }
+
         $importacion->delete();
 
         return response()->json([

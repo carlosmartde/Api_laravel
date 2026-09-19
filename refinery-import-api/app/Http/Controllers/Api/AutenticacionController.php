@@ -3,50 +3,41 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
-use App\Models\User;
-use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Hash;
+use Illuminate\Validation\Rule;
+use Laravel\Passport\Http\Controllers\AccessTokenController;
+use Laravel\Passport\Passport;
+use Psr\Http\Message\ResponseInterface;
+use Symfony\Bridge\PsrHttpMessage\Factory\PsrHttpFactory;
+use Symfony\Component\HttpFoundation\Response;
 
 class AutenticacionController extends Controller
 {
-    /**
-     * Valida las credenciales del usuario y emite un token personal de Passport.
-     */
-    public function login(Request $request): JsonResponse
+    public function login(Request $request): Response
     {
         $credenciales = $request->validate([
             'email' => ['required', 'email'],
             'password' => ['required', 'string'],
-            'nombre_token' => ['sometimes', 'string', 'max:100'],
+            'scopes' => ['sometimes', 'array', 'min:1'],
+            'scopes.*' => ['required', 'string', Rule::in(Passport::scopeIds())],
         ]);
 
-        $usuario = User::query()->where('email', $credenciales['email'])->first();
+        $scopes = $credenciales['scopes'] ?? Passport::defaultScopes();
 
-        if (! $usuario || ! Hash::check($credenciales['password'], $usuario->password)) {
-            return response()->json([
-                'mensaje' => 'Las credenciales proporcionadas no son correctas.',
-            ], 401);
-        }
-
-        $token = $usuario->createToken($credenciales['nombre_token'] ?? 'Postman Refinery Import');
-
-        return response()->json([
-            'mensaje' => 'Token generado correctamente.',
-            'token_type' => 'Bearer',
-            'access_token' => $token->accessToken,
-            'usuario' => [
-                'id' => $usuario->id,
-                'nombre' => $usuario->name,
-                'email' => $usuario->email,
-            ],
+        return $this->emitirToken([
+            'grant_type' => 'password',
+            'client_id' => config('services.passport.password_client_id'),
+            'client_secret' => config('services.passport.password_client_secret'),
+            'username' => $credenciales['email'],
+            'password' => $credenciales['password'],
+            'scope' => implode(' ', $scopes),
         ]);
     }
 
     /**
      * Muestra el usuario autenticado con el token Bearer actual.
      */
-    public function usuario(Request $request): JsonResponse
+    public function usuario(Request $request): Response
     {
         $usuario = $request->user();
 
@@ -62,12 +53,33 @@ class AutenticacionController extends Controller
     /**
      * Revoca el token Bearer empleado en la solicitud.
      */
-    public function logout(Request $request): JsonResponse
+    public function logout(Request $request): Response
     {
-        $request->user()->token()->revoke();
+        $token = $request->user()->token();
+        $refreshToken = $token->refreshToken;
+
+        $token->revoke();
+        $refreshToken?->revoke();
 
         return response()->json([
-            'mensaje' => 'Token revocado correctamente.',
+            'mensaje' => 'Sesión cerrada y tokens revocados correctamente.',
         ]);
+    }
+
+    /**
+     * Entrega la solicitud al servidor OAuth de Passport sin hacer una
+     * petición HTTP recursiva contra el mismo servidor de desarrollo.
+     */
+    private function emitirToken(array $parametros): Response
+    {
+        $solicitud = Request::create('/oauth/token', 'POST', $parametros);
+        $solicitud->headers->set('Accept', 'application/json');
+
+        $solicitudPsr = (new PsrHttpFactory)->createRequest($solicitud);
+
+        return app(AccessTokenController::class)->issueToken(
+            $solicitudPsr,
+            app(ResponseInterface::class),
+        );
     }
 }
