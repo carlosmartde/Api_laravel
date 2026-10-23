@@ -143,6 +143,9 @@ Importa `postman/Refinery-Import-API.postman_collection.json` y configura:
 La colección guarda automáticamente el ID creado para las solicitudes de
 consulta, actualización y eliminación.
 
+La guía lista para entregar al sistema consumidor está en
+[`docs/GUIA_INTEGRACION_GESTOR_TAREAS.md`](docs/GUIA_INTEGRACION_GESTOR_TAREAS.md).
+
 ## Preparación para producción
 
 1. Usa `APP_ENV=production`, `APP_DEBUG=false` y una `APP_URL` HTTPS real.
