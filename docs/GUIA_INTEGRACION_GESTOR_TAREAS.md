@@ -21,6 +21,20 @@ El propietario debe compartir por un medio seguro:
 
 El propietario **no debe compartir** el archivo `.env`, la conexión de la base de datos, `APP_KEY` ni `EXTERNAL_API_TOKEN`. Este último es administrativo y permite eliminar información.
 
+### Colección Postman
+
+Puede descargarse la [colección Postman del proyecto](../postman/Refinery-Import-API.postman_collection.json). Para utilizarla:
+
+1. Abrir Postman y seleccionar **Import**.
+2. Importar `Refinery-Import-API.postman_collection.json`.
+3. Abrir las variables de la colección.
+4. Configurar `base_url` con `https://refinery-import-api.onrender.com`.
+5. Configurar `consumer_token` con el valor entregado por el propietario.
+6. No configurar ni compartir `admin_token` para esta integración.
+7. Ejecutar primero **Listar contenedores pendientes de arribar** y después **Crear importación**.
+
+Si se entrega el paquete privado preparado por el propietario, también puede importarse el archivo de entorno `Refinery-Import-API-Produccion.postman_environment.json`; este ya contiene la URL y la credencial de consumidor.
+
 ## 3. Reglas generales de las solicitudes
 
 Todas las solicitudes protegidas deben enviarse por HTTPS e incluir:
