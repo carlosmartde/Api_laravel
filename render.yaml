@@ -1,0 +1,51 @@
+services:
+  - type: web
+    name: refinery-import-api
+    runtime: docker
+    plan: free
+    region: ohio
+    branch: deploy-koyeb
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /api/v1/salud
+    autoDeployTrigger: off
+    envVars:
+      - key: APP_NAME
+        value: Refinery Import API
+      - key: APP_ENV
+        value: production
+      - key: APP_DEBUG
+        value: "false"
+      - key: APP_KEY
+        sync: false
+      - key: APP_LOCALE
+        value: es
+      - key: APP_FALLBACK_LOCALE
+        value: es
+      - key: LOG_CHANNEL
+        value: stderr
+      - key: LOG_LEVEL
+        value: info
+      - key: DB_CONNECTION
+        value: pgsql
+      - key: DB_URL
+        sync: false
+      - key: DB_SSLMODE
+        value: require
+      - key: SESSION_DRIVER
+        value: database
+      - key: CACHE_STORE
+        value: database
+      - key: QUEUE_CONNECTION
+        value: sync
+      - key: EXTERNAL_API_TOKEN
+        sync: false
+      - key: EXTERNAL_API_RATE_LIMIT
+        value: "60"
+      - key: EXTERNAL_API_PAGE_SIZE
+        value: "25"
+      - key: EXTERNAL_API_ALLOWED_ORIGINS
+        value: ""
+      - key: SEED_DATABASE
+        value: "true"
+      - key: PORT
+        value: "8000"

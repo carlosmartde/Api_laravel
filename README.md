@@ -156,10 +156,10 @@ validación, consulta, actualización y eliminación.
 
 ## Despliegue gratuito de referencia
 
-El repositorio incluye `Dockerfile` para desplegar la API en Koyeb con PHP
-8.3.36, Apache y PostgreSQL. El contenedor escucha en el puerto `8000`, ejecuta
-las migraciones al iniciar y puede cargar los datos iniciales configurando
-`SEED_DATABASE=true`.
+El repositorio incluye `Dockerfile` y `render.yaml` para desplegar la API en
+Render Free con PHP 8.3.36, Apache y una base PostgreSQL externa como Neon. El
+contenedor escucha en el puerto `8000`, ejecuta las migraciones al iniciar y
+puede cargar los datos iniciales configurando `SEED_DATABASE=true`.
 
 Variables mínimas del servicio:
 
@@ -168,7 +168,6 @@ APP_NAME=Refinery Import API
 APP_ENV=production
 APP_DEBUG=false
 APP_KEY=base64:...
-APP_URL=https://servicio.koyeb.app
 LOG_CHANNEL=stderr
 DB_CONNECTION=pgsql
 DB_URL=postgresql://...
@@ -177,5 +176,7 @@ EXTERNAL_API_ALLOWED_ORIGINS=
 SEED_DATABASE=true
 ```
 
-La URL de PostgreSQL y los tokens deben guardarse como secretos del proveedor,
-nunca dentro del repositorio.
+La URL de PostgreSQL, `APP_KEY` y los tokens se solicitan como secretos durante
+el despliegue del Blueprint y nunca se guardan dentro del repositorio.
+
+[Desplegar la rama en Render](https://render.com/deploy?repo=https://github.com/carlosmartde/Api_laravel/tree/deploy-koyeb)
