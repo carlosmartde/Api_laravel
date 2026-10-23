@@ -11,6 +11,14 @@ class Importacion extends Model
     /** @use HasFactory<ImportacionFactory> */
     use HasFactory;
 
+    public const ESTADOS = [
+        'Documentación',
+        'En tránsito',
+        'En altamar',
+        'Proceso aduanal',
+        'Recibida',
+    ];
+
     protected $table = 'importaciones';
 
     protected $fillable = [

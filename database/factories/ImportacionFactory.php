@@ -24,7 +24,7 @@ class ImportacionFactory extends Factory
             'puerto_destino' => fake()->randomElement(['Puerto Santo Tomás', 'Puerto Quetzal']),
             'incoterm' => fake()->randomElement(['CIF', 'FOB', 'CIP', 'DAP', 'CFR']),
             'fecha_estimada_arribo' => fake()->dateTimeBetween('now', '+3 months')->format('Y-m-d'),
-            'estado' => fake()->randomElement(['Documentación', 'En tránsito', 'En altamar', 'Proceso aduanal', 'Recibida']),
+            'estado' => fake()->randomElement(Importacion::ESTADOS),
             'progreso' => fake()->numberBetween(0, 100),
             'contenedor' => fake()->bothify('???? ######-#'),
             'bultos' => fake()->numberBetween(1, 20).' bultos',

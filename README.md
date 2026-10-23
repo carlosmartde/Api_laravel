@@ -1,64 +1,85 @@
 # Refinery Import API
 
-API REST desarrollada con Laravel para administrar las importaciones de una
-refinería de aceite de palma. El proyecto conserva el contexto de la aplicación
-móvil `RefineryImportApp`: cada expediente se identifica mediante su número de
-BL/BOL y registra proveedor, material, transporte, aduana y destino en planta.
-
-El CRUD se expone exclusivamente desde `routes/api.php`. La aplicación no
-registra ni utiliza `routes/web.php`.
+API REST versionada, desarrollada con Laravel, para consultar y administrar
+expedientes de importación. El CRUD devuelve JSON, requiere un token Bearer,
+aplica límite de solicitudes y pagina los listados.
 
 ## Requisitos
 
-- PHP 8.3 o superior.
-- Composer.
-- Extensión PDO SQLite habilitada.
-- Postman para consumir y demostrar los endpoints.
+- PHP 8.3 o superior y Composer.
+- SQLite para desarrollo local.
+- MySQL o PostgreSQL recomendado en producción si habrá concurrencia.
+- Un servidor web apuntando exclusivamente a `public/` y HTTPS en producción.
 
-## Instalación
-
-Desde PowerShell, dentro de esta carpeta:
+## Instalación local
 
 ```powershell
 composer install
 Copy-Item .env.example .env
 php artisan key:generate
 New-Item database\database.sqlite -ItemType File -Force
-php artisan migrate:fresh --seed
+php artisan migrate --seed
 php artisan serve
 ```
 
-La API quedará disponible en `http://127.0.0.1:8000/api`. La base de datos usa
-SQLite y el seeder carga cinco importaciones tomadas del proyecto original.
-
-Si el proyecto ya está configurado, basta con ejecutar:
+Genera un token y colócalo en `EXTERNAL_API_TOKEN` dentro de `.env`:
 
 ```powershell
-php artisan migrate:fresh --seed
-php artisan serve
+php -r "echo bin2hex(random_bytes(32)), PHP_EOL;"
 ```
 
-## Endpoints del CRUD
+La API local queda en `http://127.0.0.1:8000/api/v1`. El comando
+`php artisan serve` es solo para desarrollo; no debe publicarse directamente.
 
-| Método | Endpoint | Acción | Respuesta correcta |
+## Autenticación
+
+Todo el CRUD requiere el encabezado:
+
+```http
+Authorization: Bearer <EXTERNAL_API_TOKEN>
+Accept: application/json
+```
+
+Ejemplo:
+
+```powershell
+curl.exe -H "Accept: application/json" -H "Authorization: Bearer TU_TOKEN" http://127.0.0.1:8000/api/v1/importaciones
+```
+
+Una credencial ausente o incorrecta responde `401`. Si el servidor no tiene
+configurado el token, responde `503`. Para rotarlo, cambia
+`EXTERNAL_API_TOKEN` en el servidor y en el sistema consumidor y ejecuta
+`php artisan config:cache`.
+
+## Endpoints
+
+| Método | Endpoint | Acción | Código correcto |
 |---|---|---|---|
-| GET | `/api/importaciones` | Listar importaciones | 200 |
-| GET | `/api/importaciones/{id}` | Consultar una importación | 200 |
-| POST | `/api/importaciones` | Crear una importación | 201 |
-| PUT/PATCH | `/api/importaciones/{id}` | Actualizar una importación | 200 |
-| DELETE | `/api/importaciones/{id}` | Eliminar una importación | 200 |
+| GET | `/api/v1/salud` | Comprobar disponibilidad, sin token | 200 |
+| GET | `/api/v1/importaciones` | Listar importaciones | 200 |
+| GET | `/api/v1/importaciones/{id}` | Consultar una importación | 200 |
+| POST | `/api/v1/importaciones` | Crear una importación | 201 |
+| PUT/PATCH | `/api/v1/importaciones/{id}` | Actualizar una importación | 200 |
+| DELETE | `/api/v1/importaciones/{id}` | Eliminar una importación | 200 |
 
-El listado también acepta filtros opcionales:
+El listado admite:
+
+- `buscar`: busca por BL, referencia, proveedor o material.
+- `estado`: filtra por un estado válido.
+- `per_page`: cantidad por página, entre 1 y 100; por defecto 25.
+- `page`: número de página.
+
+Ejemplo:
 
 ```text
-GET /api/importaciones?estado=En%20tránsito
-GET /api/importaciones?buscar=ALFA
-GET /api/importaciones?estado=Recibida&buscar=VEOLIA
+GET /api/v1/importaciones?estado=En%20tránsito&buscar=ALFA&per_page=25&page=1
 ```
 
-## JSON para crear una importación
+La respuesta del listado incluye `data`, `links`, `meta` y `mensaje`. El límite
+por defecto es de 60 solicitudes por minuto por token y se configura con
+`EXTERNAL_API_RATE_LIMIT`.
 
-En Postman selecciona `Body > raw > JSON` y usa:
+## JSON para crear una importación
 
 ```json
 {
@@ -82,55 +103,79 @@ En Postman selecciona `Body > raw > JSON` y usa:
 }
 ```
 
-Valores válidos para `estado`: `Documentación`, `En tránsito`, `En altamar`,
-`Proceso aduanal` y `Recibida`. El progreso debe ser un entero entre 0 y 100.
+Estados permitidos: `Documentación`, `En tránsito`, `En altamar`,
+`Proceso aduanal` y `Recibida`. Los errores de validación responden `422` con
+los campos rechazados.
 
-## Pruebas con Postman
+## CORS
 
-1. Inicia Laravel con `php artisan serve`.
-2. En Postman selecciona `Import`.
-3. Importa `postman/Refinery-Import-API.postman_collection.json`.
-4. Abre la colección `Refinery Import API` y confirma que la variable
-   `base_url` sea `http://127.0.0.1:8000`.
-5. Ejecuta las solicitudes en orden: listar, crear, consultar, actualizar y
-   eliminar. La solicitud de creación guarda automáticamente el ID para las
-   tres solicitudes siguientes.
+CORS solo interviene cuando el consumidor se ejecuta en un navegador. Define
+sus orígenes exactos, separados por comas y sin rutas:
 
-Todas las solicitudes ya incluyen los encabezados `Accept: application/json`
-y `Content-Type: application/json`.
-
-## Guion breve para presentar
-
-1. Mostrar `routes/api.php` y explicar `Route::apiResource`.
-2. Ejecutar `php artisan route:list --path=api` para enseñar los cinco tipos de
-   operaciones CRUD expuestos por API.
-3. En Postman, ejecutar `Listar importaciones` y mostrar los datos iniciales.
-4. Ejecutar `Crear importación` y señalar el código HTTP 201.
-5. Ejecutar `Consultar importación creada`.
-6. Ejecutar `Actualizar importación creada` y verificar estado `Recibida` y
-   progreso 100.
-7. Ejecutar `Eliminar importación creada`.
-8. Volver a listar para comprobar que el registro fue eliminado.
-
-## Estructura principal
-
-```text
-app/Http/Controllers/Api/ImportacionController.php
-app/Http/Requests/GuardarImportacionRequest.php
-app/Http/Resources/ImportacionResource.php
-app/Models/Importacion.php
-database/migrations/2026_08_21_000000_create_importaciones_table.php
-database/seeders/DatabaseSeeder.php
-routes/api.php
-tests/Feature/ImportacionApiTest.php
-postman/Refinery-Import-API.postman_collection.json
+```dotenv
+EXTERNAL_API_ALLOWED_ORIGINS=https://sistema.example.com,https://admin.example.com
 ```
 
-## Pruebas automatizadas
+Para una integración servidor a servidor puede dejarse vacío. No se recomienda
+usar `*` en producción.
+
+## Postman
+
+Importa `postman/Refinery-Import-API.postman_collection.json` y configura:
+
+- `base_url`: URL del servidor, sin `/api/v1` al final.
+- `api_token`: el mismo valor de `EXTERNAL_API_TOKEN`.
+
+La colección guarda automáticamente el ID creado para las solicitudes de
+consulta, actualización y eliminación.
+
+## Preparación para producción
+
+1. Usa `APP_ENV=production`, `APP_DEBUG=false` y una `APP_URL` HTTPS real.
+2. Configura una base de datos de producción y ejecuta `php artisan migrate --force`.
+3. Usa un token aleatorio exclusivo y los orígenes CORS exactos.
+4. Instala con `composer install --no-dev --optimize-autoloader`.
+5. Ejecuta `php artisan optimize`; repítelo después de cambiar el `.env`.
+6. Configura el document root del servidor web en `public/`, HTTPS y copias de seguridad.
+7. No publiques `.env`, `database/database.sqlite`, `vendor/` ni el servidor de Artisan.
+8. Supervisa los códigos `401`, `422`, `429` y `5xx` en los logs.
+
+La infraestructura (dominio, certificado TLS, firewall, servidor web y base de
+datos) debe configurarse en el entorno donde se desplegará la API.
+
+## Verificación
 
 ```powershell
 php artisan test
+php artisan route:list --path=api -v
+composer validate --strict
 ```
 
-Las pruebas verifican listado con filtros, creación, validación, consulta,
-actualización y eliminación.
+Las pruebas cubren salud, autenticación, CORS, filtros, paginación, creación,
+validación, consulta, actualización y eliminación.
+
+## Despliegue gratuito de referencia
+
+El repositorio incluye `Dockerfile` para desplegar la API en Koyeb con PHP
+8.3.36, Apache y PostgreSQL. El contenedor escucha en el puerto `8000`, ejecuta
+las migraciones al iniciar y puede cargar los datos iniciales configurando
+`SEED_DATABASE=true`.
+
+Variables mínimas del servicio:
+
+```dotenv
+APP_NAME=Refinery Import API
+APP_ENV=production
+APP_DEBUG=false
+APP_KEY=base64:...
+APP_URL=https://servicio.koyeb.app
+LOG_CHANNEL=stderr
+DB_CONNECTION=pgsql
+DB_URL=postgresql://...
+EXTERNAL_API_TOKEN=...
+EXTERNAL_API_ALLOWED_ORIGINS=
+SEED_DATABASE=true
+```
+
+La URL de PostgreSQL y los tokens deben guardarse como secretos del proveedor,
+nunca dentro del repositorio.

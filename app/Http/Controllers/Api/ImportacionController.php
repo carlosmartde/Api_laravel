@@ -9,6 +9,7 @@ use App\Models\Importacion;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
+use Illuminate\Validation\Rule;
 
 class ImportacionController extends Controller
 {
@@ -16,7 +17,9 @@ class ImportacionController extends Controller
     {
         $filtros = $request->validate([
             'buscar' => ['sometimes', 'nullable', 'string', 'max:100'],
-            'estado' => ['sometimes', 'nullable', 'string', 'max:50'],
+            'estado' => ['sometimes', 'nullable', 'string', Rule::in(Importacion::ESTADOS)],
+            'per_page' => ['sometimes', 'integer', 'between:1,100'],
+            'page' => ['sometimes', 'integer', 'min:1'],
         ]);
 
         $importaciones = Importacion::query()
@@ -31,7 +34,8 @@ class ImportacionController extends Controller
             })
             ->when($filtros['estado'] ?? null, fn ($query, string $estado) => $query->where('estado', $estado))
             ->latest('id')
-            ->get();
+            ->paginate($filtros['per_page'] ?? config('external-api.default_page_size', 25))
+            ->withQueryString();
 
         return ImportacionResource::collection($importaciones)->additional([
             'mensaje' => 'Importaciones consultadas correctamente.',
