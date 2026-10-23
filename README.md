@@ -156,10 +156,12 @@ validación, consulta, actualización y eliminación.
 
 ## Despliegue gratuito de referencia
 
+API publicada: [https://refinery-import-api.onrender.com](https://refinery-import-api.onrender.com)
+
 El repositorio incluye `Dockerfile` y `render.yaml` para desplegar la API en
 Render Free con PHP 8.3.36, Apache y una base PostgreSQL externa como Neon. El
 contenedor escucha en el puerto `8000`, ejecuta las migraciones al iniciar y
-puede cargar los datos iniciales configurando `SEED_DATABASE=true`.
+puede cargar datos iniciales temporalmente configurando `SEED_DATABASE=true`.
 
 Variables mínimas del servicio:
 
@@ -173,7 +175,7 @@ DB_CONNECTION=pgsql
 DB_URL=postgresql://...
 EXTERNAL_API_TOKEN=...
 EXTERNAL_API_ALLOWED_ORIGINS=
-SEED_DATABASE=true
+SEED_DATABASE=false
 ```
 
 La URL de PostgreSQL, `APP_KEY` y los tokens se solicitan como secretos durante
