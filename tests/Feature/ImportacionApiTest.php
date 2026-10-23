@@ -12,12 +12,15 @@ class ImportacionApiTest extends TestCase
 
     private const API_TOKEN = 'token-seguro-para-pruebas';
 
+    private const CONSUMER_TOKEN = 'token-consumidor-para-pruebas';
+
     protected function setUp(): void
     {
         parent::setUp();
 
         config([
-            'external-api.token' => self::API_TOKEN,
+            'external-api.admin_token' => self::API_TOKEN,
+            'external-api.consumer_token' => self::CONSUMER_TOKEN,
             'cors.allowed_origins' => ['https://cliente.example'],
         ]);
     }
@@ -74,6 +77,67 @@ class ImportacionApiTest extends TestCase
             ->assertJsonPath('data.0.proveedor', 'ALFA LAVAL')
             ->assertJsonPath('meta.per_page', 10)
             ->assertJsonPath('meta.total', 1);
+    }
+
+    public function test_lista_contenedores_pendientes_por_fecha(): void
+    {
+        Importacion::factory()->create([
+            'estado' => 'En tránsito',
+            'fecha_estimada_arribo' => '2026-11-12',
+            'contenedor' => 'CONTENEDOR-002',
+        ]);
+        Importacion::factory()->create([
+            'estado' => 'En altamar',
+            'fecha_estimada_arribo' => '2026-11-05',
+            'contenedor' => 'CONTENEDOR-001',
+        ]);
+        Importacion::factory()->create([
+            'estado' => 'Documentación',
+            'fecha_estimada_arribo' => '2026-11-03',
+            'contenedor' => null,
+        ]);
+        Importacion::factory()->create([
+            'estado' => 'Proceso aduanal',
+            'fecha_estimada_arribo' => '2026-11-01',
+            'contenedor' => 'YA-ARRIBADO',
+        ]);
+        Importacion::factory()->create([
+            'estado' => 'Recibida',
+            'fecha_estimada_arribo' => '2026-11-02',
+            'contenedor' => 'RECIBIDO',
+        ]);
+
+        $this->withToken(self::CONSUMER_TOKEN)
+            ->getJson('/api/v1/importaciones?pendiente_arribo=1&con_contenedor=1&fecha_desde=2026-11-01&fecha_hasta=2026-11-30&orden_fecha=asc')
+            ->assertOk()
+            ->assertJsonCount(2, 'data')
+            ->assertJsonPath('data.0.contenedor', 'CONTENEDOR-001')
+            ->assertJsonPath('data.1.contenedor', 'CONTENEDOR-002')
+            ->assertJsonPath('meta.total', 2);
+    }
+
+    public function test_token_consumidor_solo_puede_consultar_y_crear(): void
+    {
+        $importacion = Importacion::factory()->create();
+
+        $this->withToken(self::CONSUMER_TOKEN)
+            ->getJson("/api/v1/importaciones/{$importacion->id}")
+            ->assertOk();
+
+        $this->withToken(self::CONSUMER_TOKEN)
+            ->postJson('/api/v1/importaciones', $this->datosValidos())
+            ->assertCreated();
+
+        $this->withToken(self::CONSUMER_TOKEN)
+            ->patchJson("/api/v1/importaciones/{$importacion->id}", ['progreso' => 50])
+            ->assertForbidden()
+            ->assertJsonPath('message', 'Esta credencial solo permite consultar y registrar importaciones.');
+
+        $this->withToken(self::CONSUMER_TOKEN)
+            ->deleteJson("/api/v1/importaciones/{$importacion->id}")
+            ->assertForbidden();
+
+        $this->assertDatabaseHas('importaciones', ['id' => $importacion->id]);
     }
 
     public function test_puede_crear_una_importacion(): void

@@ -18,11 +18,18 @@ class ImportacionController extends Controller
         $filtros = $request->validate([
             'buscar' => ['sometimes', 'nullable', 'string', 'max:100'],
             'estado' => ['sometimes', 'nullable', 'string', Rule::in(Importacion::ESTADOS)],
+            'pendiente_arribo' => ['sometimes', 'boolean'],
+            'con_contenedor' => ['sometimes', 'boolean'],
+            'fecha_desde' => ['sometimes', 'nullable', 'date_format:Y-m-d'],
+            'fecha_hasta' => ['sometimes', 'nullable', 'date_format:Y-m-d', 'after_or_equal:fecha_desde'],
+            'orden_fecha' => ['sometimes', Rule::in(['asc', 'desc'])],
             'per_page' => ['sometimes', 'integer', 'between:1,100'],
             'page' => ['sometimes', 'integer', 'min:1'],
         ]);
 
-        $importaciones = Importacion::query()
+        $pendienteArribo = $request->boolean('pendiente_arribo');
+
+        $consulta = Importacion::query()
             ->when($filtros['buscar'] ?? null, function ($query, string $buscar): void {
                 $query->where(function ($query) use ($buscar): void {
                     $query
@@ -33,7 +40,24 @@ class ImportacionController extends Controller
                 });
             })
             ->when($filtros['estado'] ?? null, fn ($query, string $estado) => $query->where('estado', $estado))
-            ->latest('id')
+            ->when($pendienteArribo, fn ($query) => $query->whereIn('estado', Importacion::ESTADOS_PENDIENTES_ARRIBO))
+            ->when($request->boolean('con_contenedor'), fn ($query) => $query
+                ->whereNotNull('contenedor')
+                ->where('contenedor', '<>', ''))
+            ->when($filtros['fecha_desde'] ?? null, fn ($query, string $fecha) => $query
+                ->whereDate('fecha_estimada_arribo', '>=', $fecha))
+            ->when($filtros['fecha_hasta'] ?? null, fn ($query, string $fecha) => $query
+                ->whereDate('fecha_estimada_arribo', '<=', $fecha));
+
+        if ($pendienteArribo || isset($filtros['orden_fecha'])) {
+            $consulta
+                ->orderBy('fecha_estimada_arribo', $filtros['orden_fecha'] ?? 'asc')
+                ->orderBy('id');
+        } else {
+            $consulta->latest('id');
+        }
+
+        $importaciones = $consulta
             ->paginate($filtros['per_page'] ?? config('external-api.default_page_size', 25))
             ->withQueryString();
 

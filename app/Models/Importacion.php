@@ -19,6 +19,12 @@ class Importacion extends Model
         'Recibida',
     ];
 
+    public const ESTADOS_PENDIENTES_ARRIBO = [
+        'Documentación',
+        'En tránsito',
+        'En altamar',
+    ];
+
     protected $table = 'importaciones';
 
     protected $fillable = [

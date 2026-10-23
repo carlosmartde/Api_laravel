@@ -23,9 +23,13 @@ class AppServiceProvider extends ServiceProvider
     public function boot(): void
     {
         RateLimiter::for('external-api', function (Request $request): Limit {
+            $consumerKey = $request->bearerToken()
+                ? hash('sha256', (string) $request->bearerToken())
+                : (string) $request->ip();
+
             return Limit::perMinute(
                 max(1, (int) config('external-api.rate_limit_per_minute', 60)),
-            )->by((string) $request->ip())->response(fn (Request $request, array $headers) => response()->json([
+            )->by($consumerKey)->response(fn (Request $request, array $headers) => response()->json([
                 'message' => 'Se alcanzó el límite de solicitudes. Inténtalo de nuevo más tarde.',
             ], 429, $headers));
         });

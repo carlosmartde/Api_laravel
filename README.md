@@ -22,21 +22,24 @@ php artisan migrate --seed
 php artisan serve
 ```
 
-Genera un token y colócalo en `EXTERNAL_API_TOKEN` dentro de `.env`:
+Genera dos tokens distintos y colócalos en `.env`:
 
 ```powershell
 php -r "echo bin2hex(random_bytes(32)), PHP_EOL;"
 ```
+
+- `EXTERNAL_API_TOKEN`: credencial administrativa con CRUD completo.
+- `EXTERNAL_API_CONSUMER_TOKEN`: credencial para integraciones, limitada a consultar y crear.
 
 La API local queda en `http://127.0.0.1:8000/api/v1`. El comando
 `php artisan serve` es solo para desarrollo; no debe publicarse directamente.
 
 ## Autenticación
 
-Todo el CRUD requiere el encabezado:
+Todas las operaciones protegidas requieren el encabezado:
 
 ```http
-Authorization: Bearer <EXTERNAL_API_TOKEN>
+Authorization: Bearer <TOKEN>
 Accept: application/json
 ```
 
@@ -46,26 +49,30 @@ Ejemplo:
 curl.exe -H "Accept: application/json" -H "Authorization: Bearer TU_TOKEN" http://127.0.0.1:8000/api/v1/importaciones
 ```
 
-Una credencial ausente o incorrecta responde `401`. Si el servidor no tiene
-configurado el token, responde `503`. Para rotarlo, cambia
-`EXTERNAL_API_TOKEN` en el servidor y en el sistema consumidor y ejecuta
-`php artisan config:cache`.
+Una credencial ausente o incorrecta responde `401`. El token consumidor puede
+usar `GET` y `POST`; los intentos de actualizar o eliminar responden `403`. El
+token administrativo conserva el CRUD completo. Si no hay credenciales
+configuradas, la API responde `503`.
 
 ## Endpoints
 
-| Método | Endpoint | Acción | Código correcto |
-|---|---|---|---|
-| GET | `/api/v1/salud` | Comprobar disponibilidad, sin token | 200 |
-| GET | `/api/v1/importaciones` | Listar importaciones | 200 |
-| GET | `/api/v1/importaciones/{id}` | Consultar una importación | 200 |
-| POST | `/api/v1/importaciones` | Crear una importación | 201 |
-| PUT/PATCH | `/api/v1/importaciones/{id}` | Actualizar una importación | 200 |
-| DELETE | `/api/v1/importaciones/{id}` | Eliminar una importación | 200 |
+| Método | Endpoint | Acción | Acceso | Código correcto |
+|---|---|---|---|---|
+| GET | `/api/v1/salud` | Comprobar disponibilidad | Público | 200 |
+| GET | `/api/v1/importaciones` | Listar importaciones | Consumidor o administrador | 200 |
+| GET | `/api/v1/importaciones/{id}` | Consultar una importación | Consumidor o administrador | 200 |
+| POST | `/api/v1/importaciones` | Crear una importación | Consumidor o administrador | 201 |
+| PUT/PATCH | `/api/v1/importaciones/{id}` | Actualizar una importación | Solo administrador | 200 |
+| DELETE | `/api/v1/importaciones/{id}` | Eliminar una importación | Solo administrador | 200 |
 
 El listado admite:
 
 - `buscar`: busca por BL, referencia, proveedor o material.
 - `estado`: filtra por un estado válido.
+- `pendiente_arribo=1`: incluye únicamente `Documentación`, `En tránsito` y `En altamar`.
+- `con_contenedor=1`: excluye expedientes sin número o identificación de contenedor.
+- `fecha_desde` y `fecha_hasta`: limitan la fecha estimada, en formato `AAAA-MM-DD`.
+- `orden_fecha`: ordena la fecha estimada con `asc` o `desc`. Los pendientes usan `asc` por defecto.
 - `per_page`: cantidad por página, entre 1 y 100; por defecto 25.
 - `page`: número de página.
 
@@ -75,8 +82,14 @@ Ejemplo:
 GET /api/v1/importaciones?estado=En%20tránsito&buscar=ALFA&per_page=25&page=1
 ```
 
+Listado de contenedores pendientes de arribar, ordenado por la fecha más próxima:
+
+```text
+GET /api/v1/importaciones?pendiente_arribo=1&con_contenedor=1&orden_fecha=asc&per_page=100
+```
+
 La respuesta del listado incluye `data`, `links`, `meta` y `mensaje`. El límite
-por defecto es de 60 solicitudes por minuto por token y se configura con
+por defecto es de 60 solicitudes por minuto por credencial y se configura con
 `EXTERNAL_API_RATE_LIMIT`.
 
 ## JSON para crear una importación
@@ -124,7 +137,8 @@ usar `*` en producción.
 Importa `postman/Refinery-Import-API.postman_collection.json` y configura:
 
 - `base_url`: URL del servidor, sin `/api/v1` al final.
-- `api_token`: el mismo valor de `EXTERNAL_API_TOKEN`.
+- `consumer_token`: valor de `EXTERNAL_API_CONSUMER_TOKEN`; úsalo para listar y crear.
+- `admin_token`: valor de `EXTERNAL_API_TOKEN`; resérvalo para actualizar y eliminar.
 
 La colección guarda automáticamente el ID creado para las solicitudes de
 consulta, actualización y eliminación.
@@ -133,7 +147,7 @@ consulta, actualización y eliminación.
 
 1. Usa `APP_ENV=production`, `APP_DEBUG=false` y una `APP_URL` HTTPS real.
 2. Configura una base de datos de producción y ejecuta `php artisan migrate --force`.
-3. Usa un token aleatorio exclusivo y los orígenes CORS exactos.
+3. Usa tokens administrativos y de consumidor distintos, y configura los orígenes CORS exactos.
 4. Instala con `composer install --no-dev --optimize-autoloader`.
 5. Ejecuta `php artisan optimize`; repítelo después de cambiar el `.env`.
 6. Configura el document root del servidor web en `public/`, HTTPS y copias de seguridad.
@@ -174,6 +188,7 @@ LOG_CHANNEL=stderr
 DB_CONNECTION=pgsql
 DB_URL=postgresql://...
 EXTERNAL_API_TOKEN=...
+EXTERNAL_API_CONSUMER_TOKEN=...
 EXTERNAL_API_ALLOWED_ORIGINS=
 SEED_DATABASE=false
 ```
