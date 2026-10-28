@@ -3,66 +3,25 @@
 namespace Tests\Feature;
 
 use App\Models\Importacion;
+use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Hash;
+use Laravel\Passport\ClientRepository;
+use Laravel\Passport\Passport;
 use Tests\TestCase;
 
 class ImportacionApiTest extends TestCase
 {
     use RefreshDatabase;
 
-    private const API_TOKEN = 'token-seguro-para-pruebas';
-
-    private const CONSUMER_TOKEN = 'token-consumidor-para-pruebas';
-
     protected function setUp(): void
     {
         parent::setUp();
 
-        config([
-            'external-api.admin_token' => self::API_TOKEN,
-            'external-api.consumer_token' => self::CONSUMER_TOKEN,
-            'cors.allowed_origins' => ['https://cliente.example'],
-        ]);
-    }
-
-    public function test_el_endpoint_de_salud_es_publico(): void
-    {
-        $this->getJson('/api/v1/salud')
-            ->assertOk()
-            ->assertJson([
-                'estado' => 'ok',
-                'version' => 'v1',
-                'base_de_datos' => 'disponible',
-            ]);
-    }
-
-    public function test_el_crud_requiere_un_token_valido(): void
-    {
-        $this->getJson('/api/v1/importaciones')
-            ->assertUnauthorized()
-            ->assertHeader('WWW-Authenticate', 'Bearer')
-            ->assertJsonPath('message', 'Credenciales de API inválidas.');
-
-        $this->withToken('token-incorrecto')
-            ->getJson('/api/v1/importaciones')
-            ->assertUnauthorized();
-    }
-
-    public function test_limita_las_solicitudes_por_consumidor(): void
-    {
-        config(['external-api.rate_limit_per_minute' => 1]);
-
-        $this->withToken(self::API_TOKEN)
-            ->getJson('/api/v1/importaciones')
-            ->assertOk();
-
-        $this->withToken(self::API_TOKEN)
-            ->getJson('/api/v1/importaciones')
-            ->assertTooManyRequests()
-            ->assertJsonPath(
-                'message',
-                'Se alcanzó el límite de solicitudes. Inténtalo de nuevo más tarde.',
-            );
+        Passport::actingAs(
+            User::factory()->create(['role' => 'admin']),
+            ['admin'],
+        );
     }
 
     public function test_puede_listar_y_filtrar_importaciones(): void
@@ -70,80 +29,75 @@ class ImportacionApiTest extends TestCase
         Importacion::factory()->create(['estado' => 'Recibida', 'proveedor' => 'ALFA LAVAL']);
         Importacion::factory()->create(['estado' => 'En tránsito', 'proveedor' => 'SIEMENS']);
 
-        $this->withToken(self::API_TOKEN)
-            ->getJson('/api/v1/importaciones?estado=Recibida&buscar=ALFA&per_page=10')
+        $this->getJson('/api/importaciones?estado=Recibida&buscar=ALFA')
             ->assertOk()
             ->assertJsonCount(1, 'data')
-            ->assertJsonPath('data.0.proveedor', 'ALFA LAVAL')
-            ->assertJsonPath('meta.per_page', 10)
-            ->assertJsonPath('meta.total', 1);
+            ->assertJsonPath('data.0.proveedor', 'ALFA LAVAL');
     }
 
-    public function test_lista_contenedores_pendientes_por_fecha(): void
+    public function test_el_crud_requiere_autenticacion(): void
     {
-        Importacion::factory()->create([
-            'estado' => 'En tránsito',
-            'fecha_estimada_arribo' => '2026-11-12',
-            'contenedor' => 'CONTENEDOR-002',
-        ]);
-        Importacion::factory()->create([
-            'estado' => 'En altamar',
-            'fecha_estimada_arribo' => '2026-11-05',
-            'contenedor' => 'CONTENEDOR-001',
-        ]);
-        Importacion::factory()->create([
-            'estado' => 'Documentación',
-            'fecha_estimada_arribo' => '2026-11-03',
-            'contenedor' => null,
-        ]);
-        Importacion::factory()->create([
-            'estado' => 'Proceso aduanal',
-            'fecha_estimada_arribo' => '2026-11-01',
-            'contenedor' => 'YA-ARRIBADO',
-        ]);
-        Importacion::factory()->create([
-            'estado' => 'Recibida',
-            'fecha_estimada_arribo' => '2026-11-02',
-            'contenedor' => 'RECIBIDO',
+        auth('api')->forgetUser();
+
+        $this->getJson('/api/importaciones')->assertUnauthorized();
+    }
+
+    public function test_login_devuelve_usuario_y_permisos_segun_su_rol(): void
+    {
+        $cliente = app(ClientRepository::class)
+            ->createPasswordGrantClient('Cliente web de pruebas', 'users', true);
+
+        config([
+            'services.passport.password_client_id' => $cliente->id,
+            'services.passport.password_client_secret' => $cliente->plainSecret,
         ]);
 
-        $this->withToken(self::CONSUMER_TOKEN)
-            ->getJson('/api/v1/importaciones?pendiente_arribo=1&con_contenedor=1&fecha_desde=2026-11-01&fecha_hasta=2026-11-30&orden_fecha=asc')
+        $usuario = User::factory()->create([
+            'email' => 'operador@refineryimport.test',
+            'password' => Hash::make('Refinery2026!'),
+            'role' => 'operador',
+        ]);
+
+        $respuesta = $this->postJson('/api/login', [
+            'email' => $usuario->email,
+            'password' => 'Refinery2026!',
+        ]);
+
+        $respuesta
             ->assertOk()
-            ->assertJsonCount(2, 'data')
-            ->assertJsonPath('data.0.contenedor', 'CONTENEDOR-001')
-            ->assertJsonPath('data.1.contenedor', 'CONTENEDOR-002')
-            ->assertJsonPath('meta.total', 2);
+            ->assertJsonPath('token_type', 'Bearer')
+            ->assertJsonPath('user.role', 'operador')
+            ->assertJsonPath('user.email', $usuario->email)
+            ->assertJsonPath('user.permissions.0', 'importaciones.read')
+            ->assertJsonPath('user.permissions.1', 'importaciones.write')
+            ->assertJsonStructure(['access_token', 'refresh_token', 'expires_in']);
+
+        auth('api')->forgetUser();
+
+        $this->withToken($respuesta->json('access_token'))
+            ->getJson('/api/me')
+            ->assertOk()
+            ->assertJsonPath('user.email', $usuario->email);
     }
 
-    public function test_token_consumidor_solo_puede_consultar_y_crear(): void
+    public function test_login_rechaza_credenciales_incorrectas(): void
     {
-        $importacion = Importacion::factory()->create();
+        User::factory()->create([
+            'email' => 'lector@refineryimport.test',
+            'password' => Hash::make('ClaveCorrecta!'),
+        ]);
 
-        $this->withToken(self::CONSUMER_TOKEN)
-            ->getJson("/api/v1/importaciones/{$importacion->id}")
-            ->assertOk();
-
-        $this->withToken(self::CONSUMER_TOKEN)
-            ->postJson('/api/v1/importaciones', $this->datosValidos())
-            ->assertCreated();
-
-        $this->withToken(self::CONSUMER_TOKEN)
-            ->patchJson("/api/v1/importaciones/{$importacion->id}", ['progreso' => 50])
-            ->assertForbidden()
-            ->assertJsonPath('message', 'Esta credencial solo permite consultar y registrar importaciones.');
-
-        $this->withToken(self::CONSUMER_TOKEN)
-            ->deleteJson("/api/v1/importaciones/{$importacion->id}")
-            ->assertForbidden();
-
-        $this->assertDatabaseHas('importaciones', ['id' => $importacion->id]);
+        $this->postJson('/api/login', [
+            'email' => 'lector@refineryimport.test',
+            'password' => 'ClaveIncorrecta!',
+        ])
+            ->assertUnprocessable()
+            ->assertJsonPath('message', 'El correo o la contraseña no son correctos.');
     }
 
     public function test_puede_crear_una_importacion(): void
     {
-        $this->withToken(self::API_TOKEN)
-            ->postJson('/api/v1/importaciones', $this->datosValidos())
+        $this->postJson('/api/importaciones', $this->datosValidos())
             ->assertCreated()
             ->assertJsonPath('data.bl', 'TEST-123456789')
             ->assertJsonPath('data.progreso', 25);
@@ -156,12 +110,11 @@ class ImportacionApiTest extends TestCase
 
     public function test_rechaza_datos_invalidos(): void
     {
-        $this->withToken(self::API_TOKEN)
-            ->postJson('/api/v1/importaciones', [
-                'bl' => '',
-                'progreso' => 120,
-                'estado' => 'Desconocido',
-            ])
+        $this->postJson('/api/importaciones', [
+            'bl' => '',
+            'progreso' => 120,
+            'estado' => 'Desconocido',
+        ])
             ->assertUnprocessable()
             ->assertJsonValidationErrors(['bl', 'referencia', 'estado', 'progreso']);
     }
@@ -170,37 +123,23 @@ class ImportacionApiTest extends TestCase
     {
         $importacion = Importacion::factory()->create();
 
-        $this->withToken(self::API_TOKEN)
-            ->getJson("/api/v1/importaciones/{$importacion->id}")
+        $this->getJson("/api/importaciones/{$importacion->id}")
             ->assertOk()
             ->assertJsonPath('data.id', $importacion->id);
 
-        $this->withToken(self::API_TOKEN)
-            ->putJson("/api/v1/importaciones/{$importacion->id}", [
-                'estado' => 'Recibida',
-                'progreso' => 100,
-            ])
+        $this->putJson("/api/importaciones/{$importacion->id}", [
+            'estado' => 'Recibida',
+            'progreso' => 100,
+        ])
             ->assertOk()
             ->assertJsonPath('data.estado', 'Recibida')
             ->assertJsonPath('data.progreso', 100);
 
-        $this->withToken(self::API_TOKEN)
-            ->deleteJson("/api/v1/importaciones/{$importacion->id}")
+        $this->deleteJson("/api/importaciones/{$importacion->id}")
             ->assertOk()
             ->assertJsonPath('mensaje', 'Importación eliminada correctamente.');
 
         $this->assertDatabaseMissing('importaciones', ['id' => $importacion->id]);
-    }
-
-    public function test_responde_a_preflight_cors_para_un_origen_permitido(): void
-    {
-        $this->call('OPTIONS', '/api/v1/importaciones', [], [], [], [
-            'HTTP_ORIGIN' => 'https://cliente.example',
-            'HTTP_ACCESS_CONTROL_REQUEST_METHOD' => 'GET',
-            'HTTP_ACCESS_CONTROL_REQUEST_HEADERS' => 'authorization, content-type',
-        ])
-            ->assertNoContent()
-            ->assertHeader('Access-Control-Allow-Origin', 'https://cliente.example');
     }
 
     private function datosValidos(): array

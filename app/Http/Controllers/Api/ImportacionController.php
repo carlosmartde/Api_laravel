@@ -5,11 +5,12 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\GuardarImportacionRequest;
 use App\Http\Resources\ImportacionResource;
+use App\Models\EventoSeguimiento;
 use App\Models\Importacion;
+use App\Services\AuditService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
-use Illuminate\Validation\Rule;
 
 class ImportacionController extends Controller
 {
@@ -17,19 +18,15 @@ class ImportacionController extends Controller
     {
         $filtros = $request->validate([
             'buscar' => ['sometimes', 'nullable', 'string', 'max:100'],
-            'estado' => ['sometimes', 'nullable', 'string', Rule::in(Importacion::ESTADOS)],
-            'pendiente_arribo' => ['sometimes', 'boolean'],
-            'con_contenedor' => ['sometimes', 'boolean'],
-            'fecha_desde' => ['sometimes', 'nullable', 'date_format:Y-m-d'],
-            'fecha_hasta' => ['sometimes', 'nullable', 'date_format:Y-m-d', 'after_or_equal:fecha_desde'],
-            'orden_fecha' => ['sometimes', Rule::in(['asc', 'desc'])],
-            'per_page' => ['sometimes', 'integer', 'between:1,100'],
-            'page' => ['sometimes', 'integer', 'min:1'],
+            'estado' => ['sometimes', 'nullable', 'string', 'max:50'],
         ]);
 
-        $pendienteArribo = $request->boolean('pendiente_arribo');
-
-        $consulta = Importacion::query()
+        $importaciones = Importacion::query()
+            ->withCount([
+                'documentos',
+                'tareas as tareas_pendientes_count' => fn ($query) => $query->where('estado', '!=', 'Completada'),
+                'incidencias as incidencias_abiertas_count' => fn ($query) => $query->where('estado', '!=', 'Cerrada'),
+            ])
             ->when($filtros['buscar'] ?? null, function ($query, string $buscar): void {
                 $query->where(function ($query) use ($buscar): void {
                     $query
@@ -40,26 +37,8 @@ class ImportacionController extends Controller
                 });
             })
             ->when($filtros['estado'] ?? null, fn ($query, string $estado) => $query->where('estado', $estado))
-            ->when($pendienteArribo, fn ($query) => $query->whereIn('estado', Importacion::ESTADOS_PENDIENTES_ARRIBO))
-            ->when($request->boolean('con_contenedor'), fn ($query) => $query
-                ->whereNotNull('contenedor')
-                ->where('contenedor', '<>', ''))
-            ->when($filtros['fecha_desde'] ?? null, fn ($query, string $fecha) => $query
-                ->whereDate('fecha_estimada_arribo', '>=', $fecha))
-            ->when($filtros['fecha_hasta'] ?? null, fn ($query, string $fecha) => $query
-                ->whereDate('fecha_estimada_arribo', '<=', $fecha));
-
-        if ($pendienteArribo || isset($filtros['orden_fecha'])) {
-            $consulta
-                ->orderBy('fecha_estimada_arribo', $filtros['orden_fecha'] ?? 'asc')
-                ->orderBy('id');
-        } else {
-            $consulta->latest('id');
-        }
-
-        $importaciones = $consulta
-            ->paginate($filtros['per_page'] ?? config('external-api.default_page_size', 25))
-            ->withQueryString();
+            ->latest('id')
+            ->get();
 
         return ImportacionResource::collection($importaciones)->additional([
             'mensaje' => 'Importaciones consultadas correctamente.',
@@ -70,6 +49,18 @@ class ImportacionController extends Controller
     {
         $importacion = Importacion::create($request->validated());
 
+        EventoSeguimiento::create([
+            'importacion_id' => $importacion->id,
+            'usuario_id' => $request->user()?->id,
+            'tipo' => 'Creación',
+            'estado' => $importacion->estado,
+            'titulo' => 'Expediente creado',
+            'descripcion' => "Se registró la importación {$importacion->referencia}.",
+            'ocurrido_en' => now(),
+        ]);
+        $importacion->update(['ultimo_evento_en' => now()]);
+        AuditService::record($request, 'crear', $importacion, 'Importación creada', null, $importacion->toArray());
+
         return (new ImportacionResource($importacion))
             ->additional(['mensaje' => 'Importación creada correctamente.'])
             ->response()
@@ -78,6 +69,12 @@ class ImportacionController extends Controller
 
     public function show(Importacion $importacion): ImportacionResource
     {
+        $importacion->loadCount([
+            'documentos',
+            'tareas as tareas_pendientes_count' => fn ($query) => $query->where('estado', '!=', 'Completada'),
+            'incidencias as incidencias_abiertas_count' => fn ($query) => $query->where('estado', '!=', 'Cerrada'),
+        ]);
+
         return (new ImportacionResource($importacion))->additional([
             'mensaje' => 'Importación consultada correctamente.',
         ]);
@@ -85,15 +82,37 @@ class ImportacionController extends Controller
 
     public function update(GuardarImportacionRequest $request, Importacion $importacion): ImportacionResource
     {
+        $antes = $importacion->toArray();
+        $estadoAnterior = $importacion->estado;
         $importacion->update($request->validated());
+
+        if ($importacion->estado !== $estadoAnterior) {
+            EventoSeguimiento::create([
+                'importacion_id' => $importacion->id,
+                'usuario_id' => $request->user()?->id,
+                'tipo' => 'Estado',
+                'estado' => $importacion->estado,
+                'titulo' => "Estado actualizado a {$importacion->estado}",
+                'descripcion' => "El expediente avanzó desde {$estadoAnterior}.",
+                'ocurrido_en' => now(),
+            ]);
+            $importacion->forceFill([
+                'ultimo_evento_en' => now(),
+                'recibida_en' => $importacion->estado === 'Recibida' ? now() : $importacion->recibida_en,
+            ])->save();
+        }
+
+        AuditService::record($request, 'actualizar', $importacion, 'Importación actualizada', $antes, $importacion->fresh()->toArray());
 
         return (new ImportacionResource($importacion->refresh()))->additional([
             'mensaje' => 'Importación actualizada correctamente.',
         ]);
     }
 
-    public function destroy(Importacion $importacion): JsonResponse
+    public function destroy(Request $request, Importacion $importacion): JsonResponse
     {
+        $antes = $importacion->toArray();
+        AuditService::record($request, 'eliminar', $importacion, 'Importación eliminada', $antes);
         $importacion->delete();
 
         return response()->json([

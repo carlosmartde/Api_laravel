@@ -47,6 +47,12 @@ services:
         value: "25"
       - key: EXTERNAL_API_ALLOWED_ORIGINS
         value: ""
+      - key: CORS_ALLOWED_ORIGINS
+        value: ""
+      - key: PASSPORT_PASSWORD_CLIENT_ID
+        sync: false
+      - key: PASSPORT_PASSWORD_CLIENT_SECRET
+        sync: false
       - key: SEED_DATABASE
         value: "false"
       - key: PORT

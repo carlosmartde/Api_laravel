@@ -1,0 +1,26 @@
+{
+  "cli": {
+    "appVersionSource": "local"
+  },
+  "build": {
+    "preview": {
+      "distribution": "internal",
+      "env": {
+        "EXPO_PUBLIC_REFINERY_API_URL": "https://refinery-import-api.onrender.com/api",
+        "EXPO_PUBLIC_TASKS_API_URL": "https://carlos-tareas-api.onrender.com/api/v1"
+      },
+      "android": {
+        "buildType": "apk"
+      }
+    },
+    "production": {
+      "env": {
+        "EXPO_PUBLIC_REFINERY_API_URL": "https://refinery-import-api.onrender.com/api",
+        "EXPO_PUBLIC_TASKS_API_URL": "https://carlos-tareas-api.onrender.com/api/v1"
+      },
+      "android": {
+        "buildType": "app-bundle"
+      }
+    }
+  }
+}

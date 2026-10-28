@@ -8,6 +8,11 @@ fi
 php artisan config:clear
 php artisan migrate --force
 
+if [ ! -f storage/oauth-private.key ] || [ ! -f storage/oauth-public.key ]; then
+    php artisan passport:keys --force
+    chown www-data:www-data storage/oauth-private.key storage/oauth-public.key
+fi
+
 if [ "${SEED_DATABASE:-false}" = "true" ]; then
     php artisan db:seed --force
 fi

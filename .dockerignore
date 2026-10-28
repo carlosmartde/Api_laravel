@@ -9,3 +9,10 @@ node_modules
 public/build
 storage/logs/*
 vendor
+private-delivery/
+private-delivery.zip
+node_modules
+.expo
+output
+tmp
+refinery-import-api

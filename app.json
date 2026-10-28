@@ -1,0 +1,33 @@
+{
+  "expo": {
+    "name": "Refinery Import",
+    "slug": "refinery-import-app",
+    "version": "1.2.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "backgroundColor": "#071C2B"
+    },
+    "android": {
+      "package": "com.refineryimport.app",
+      "versionCode": 3,
+      "adaptiveIcon": {
+        "backgroundColor": "#071C2B"
+      }
+    },
+    "ios": {
+      "supportsTablet": true
+    },
+    "web": {
+      "bundler": "metro"
+    },
+    "plugins": [
+      "expo-font"
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "7d24635f-73b7-434a-a2f6-bf19c6a0c002"
+      }
+    }
+  }
+}

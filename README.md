@@ -1,5 +1,13 @@
 # Refinery Import API
 
+La rama de despliegue contiene dos contratos sobre la misma base PostgreSQL:
+
+- `/api/*`: API completa protegida con OAuth 2.0 para la aplicación Expo.
+- `/api/v1/*`: contrato Bearer compatible con el sistema consumidor externo.
+
+Ambos contratos escriben y consultan la misma tabla `importaciones`, por lo que
+los registros creados desde cualquiera de los dos sistemas aparecen en ambos.
+
 API REST versionada, desarrollada con Laravel, para consultar y administrar
 expedientes de importación. El CRUD devuelve JSON, requiere un token Bearer,
 aplica límite de solicitudes y pagina los listados.

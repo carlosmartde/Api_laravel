@@ -1,0 +1,50 @@
+# Dependencies and local Expo state
+node_modules/
+.expo/
+.npm-cache/
+
+# Laravel backend (not needed in the Android bundle)
+app/
+bootstrap/
+config/
+database/
+postman/
+public/
+refinery-import-api/
+resources/
+routes/
+storage/
+tests/
+vendor/
+artisan
+composer.json
+composer.lock
+phpunit.xml
+vite.config.js
+
+# Reports, generated artifacts, and temporary work
+*.docx
+*.pdf
+_architecture_report_work/
+_docx_work/
+_semana4_work/
+dist-test/
+dist-web-test/
+output/
+tmp/
+
+# Local environment and repository metadata
+*.log
+.DS_Store
+.env
+.env.*
+!.env.example
+.git/
+.github/
+.codex/
+.cursor/
+.idea/
+.nova/
+.vscode/
+.zed/
+auth.json
