@@ -22,6 +22,7 @@ import { Ionicons } from "@expo/vector-icons";
 import * as DocumentPicker from "expo-document-picker";
 import LoginScreen from "./LoginScreen";
 import AppShell from "./AppShell";
+import TasksScreen from "./TasksScreen";
 import { DirectoryScreen, OperationsScreen, ReportsScreen } from "./CommercialScreens";
 import {
   createReception,
@@ -1233,6 +1234,7 @@ export default function RefineryLogisticsApp() {
     if (screen === "home") return <Dashboard imports={imports} openImport={openImport} refreshing={dataBusy} onRefresh={loadData} onNavigate={setScreen} />;
     if (screen === "imports") return <ImportsScreen imports={imports} openImport={openImport} refreshing={dataBusy} onRefresh={loadData} onNewImport={() => setShowNewImport(true)} canWrite={session?.user?.permissions?.some((scope) => ["admin", "importaciones.write"].includes(scope))} />;
     if (screen === "operations") return <OperationsScreen session={session} imports={imports} onOpenImport={openImport} canWrite={session?.user?.permissions?.some((scope) => ["admin", "importaciones.write"].includes(scope))} />;
+    if (screen === "tasks") return <TasksScreen session={session} imports={imports} />;
     if (screen === "reports") return <ReportsScreen session={session} imports={imports} onOpenImport={openImport} />;
     if (screen === "directory") return <DirectoryScreen session={session} />;
     return (

@@ -5,6 +5,7 @@ use App\Http\Controllers\Api\ExternalImportacionController;
 use App\Http\Controllers\Api\ImportacionController;
 use App\Http\Controllers\Api\OperacionController;
 use App\Http\Controllers\Api\SaludController;
+use App\Http\Controllers\Api\SistemaBTareasController;
 use Illuminate\Support\Facades\Route;
 
 // Contrato estable para el sistema externo existente.
@@ -45,6 +46,10 @@ Route::middleware('auth:api')->group(function (): void {
         Route::get('importaciones/{importacion}/documentos', [OperacionController::class, 'documentos']);
         Route::get('importaciones/{importacion}/recepciones', [OperacionController::class, 'recepciones']);
         Route::get('documentos/{documento}/descargar', [OperacionController::class, 'descargarDocumento']);
+        Route::get('integraciones/sistema-b/salud', [SistemaBTareasController::class, 'salud']);
+        Route::get('integraciones/sistema-b/tareas', [SistemaBTareasController::class, 'tareas']);
+        Route::get('integraciones/sistema-b/tareas/{tarea}', [SistemaBTareasController::class, 'tarea']);
+        Route::get('integraciones/sistema-b/recordatorios', [SistemaBTareasController::class, 'recordatorios']);
     });
 
     Route::middleware('scope:admin,importaciones.write')->group(function (): void {
@@ -56,6 +61,10 @@ Route::middleware('auth:api')->group(function (): void {
         Route::post('importaciones/{importacion}/recepciones', [OperacionController::class, 'guardarRecepcion']);
         Route::post('incidencias', [OperacionController::class, 'guardarIncidencia']);
         Route::patch('incidencias/{incidencia}', [OperacionController::class, 'actualizarIncidencia']);
+        Route::post('integraciones/sistema-b/tareas', [SistemaBTareasController::class, 'guardarTarea']);
+        Route::post('integraciones/sistema-b/recordatorios', [SistemaBTareasController::class, 'guardarRecordatorio']);
+        Route::patch('integraciones/sistema-b/tareas/{tarea}', [SistemaBTareasController::class, 'actualizarTarea']);
+        Route::patch('integraciones/sistema-b/recordatorios/{recordatorio}', [SistemaBTareasController::class, 'actualizarRecordatorio']);
     });
 
     Route::get('auditoria', [OperacionController::class, 'auditoria'])

@@ -18,13 +18,11 @@ import {
   TasksApiError,
   createReminder,
   createTask,
+  getTask,
   health,
   listAllAlarms,
   listAllReminders,
   listAllTasks,
-  login,
-  logout,
-  refresh,
   updateReminder,
   updateTask,
 } from "./tasksApi";
@@ -68,8 +66,26 @@ function formatDate(value) {
   }).format(date);
 }
 
+function sameInstant(first, second) {
+  const firstTime = new Date(first).getTime();
+  const secondTime = new Date(second).getTime();
+  return Number.isFinite(firstTime) && firstTime === secondTime;
+}
+
 function newReminderDate() {
   return new Date(Date.now() + 60 * 60 * 1000).toISOString();
+}
+
+function newClientReference() {
+  const random = Math.random().toString(36).slice(2, 10);
+  return `refinery-tarea-${Date.now()}-${random}`;
+}
+
+function createdByLabel(item) {
+  const creator = item?.created_by;
+  if (!creator) return "Sistema externo";
+  if (typeof creator === "string") return creator;
+  return creator.name || creator.email || `Usuario ${creator.id || "externo"}`;
 }
 
 function priorityColor(priority) {
@@ -88,96 +104,15 @@ function Metric({ icon, value, label, color }) {
   );
 }
 
-function LoginPanel({ busy, onLogin }) {
-  const [email, setEmail] = useState(process.env.EXPO_PUBLIC_TASKS_API_EMAIL || "");
-  const [password, setPassword] = useState("");
-  const [serverStatus, setServerStatus] = useState("checking");
-
-  useEffect(() => {
-    const controller = new AbortController();
-    health(controller.signal)
-      .then((result) => setServerStatus(result?.estado === "ok" ? "online" : "error"))
-      .catch(() => setServerStatus("error"));
-    return () => controller.abort();
-  }, []);
-
-  const submit = () => {
-    if (!email.trim() || !password) {
-      Alert.alert("Datos incompletos", "Escribe tu correo y contraseña.");
-      return;
-    }
-    onLogin(email, password);
-  };
-
-  return (
-    <ScrollView contentContainerStyle={styles.loginScreen} keyboardShouldPersistTaps="handled">
-      <View style={styles.loginMark}>
-        <Ionicons name="checkbox" size={36} color={COLORS.white} />
-      </View>
-      <Text style={styles.loginTitle}>Tareas y recordatorios</Text>
-      <Text style={styles.loginText}>
-        Inicia sesión para consultar tu agenda y asociar recordatorios a importaciones.
-      </Text>
-
-      <View style={styles.serverRow}>
-        <View
-          style={[
-            styles.statusDot,
-            { backgroundColor: serverStatus === "online" ? COLORS.green : serverStatus === "error" ? COLORS.red : COLORS.orange },
-          ]}
-        />
-        <Text style={styles.serverText} numberOfLines={1}>
-          {serverStatus === "online" ? "API disponible" : serverStatus === "error" ? "API no disponible" : "Comprobando API"}
-        </Text>
-      </View>
-
-      <View style={styles.loginCard}>
-        <Text style={styles.label}>CORREO</Text>
-        <TextInput
-          autoCapitalize="none"
-          autoComplete="email"
-          keyboardType="email-address"
-          value={email}
-          onChangeText={setEmail}
-          placeholder="usuario@correo.com"
-          placeholderTextColor="#97A3AB"
-          style={styles.input}
-        />
-        <Text style={styles.label}>CONTRASEÑA</Text>
-        <TextInput
-          autoCapitalize="none"
-          autoComplete="password"
-          secureTextEntry
-          value={password}
-          onChangeText={setPassword}
-          placeholder="Tu contraseña"
-          placeholderTextColor="#97A3AB"
-          style={styles.input}
-          onSubmitEditing={submit}
-        />
-        <TouchableOpacity style={[styles.mainButton, busy && styles.disabled]} disabled={busy} onPress={submit}>
-          {busy ? <ActivityIndicator color={COLORS.white} /> : <Ionicons name="log-in-outline" size={19} color={COLORS.white} />}
-          <Text style={styles.mainButtonText}>{busy ? "Conectando…" : "Iniciar sesión"}</Text>
-        </TouchableOpacity>
-      </View>
-
-      <Text style={styles.securityNote}>
-        La contraseña y los tokens permanecen únicamente en memoria durante esta sesión.
-      </Text>
-      <Text style={styles.endpoint} numberOfLines={1}>{TASKS_API_URL}</Text>
-    </ScrollView>
-  );
-}
-
 function TaskCard({ item, busy, onToggle }) {
   const color = priorityColor(item.priority);
   return (
     <View style={[styles.card, item.completed && styles.completedCard]}>
       <View style={styles.cardTop}>
         <TouchableOpacity
-          accessibilityLabel={item.completed ? "Marcar tarea pendiente" : "Completar tarea"}
-          disabled={busy}
-          onPress={() => onToggle(item)}
+          accessibilityLabel={item.can_update ? (item.completed ? "Marcar tarea pendiente" : "Completar tarea") : "Tarea de solo lectura"}
+          disabled={busy || !item.can_update}
+          onPress={() => item.can_update && onToggle(item)}
         >
           <Ionicons
             name={item.completed ? "checkmark-circle" : "ellipse-outline"}
@@ -196,6 +131,11 @@ function TaskCard({ item, busy, onToggle }) {
       <View style={styles.cardMetaRow}>
         <Ionicons name="calendar-outline" size={15} color={COLORS.muted} />
         <Text style={styles.cardMeta}>{formatDate(item.due_at)}</Text>
+      </View>
+      <View style={styles.cardMetaRow}>
+        <Ionicons name="person-outline" size={15} color={COLORS.muted} />
+        <Text style={styles.cardMeta}>Creada por {createdByLabel(item)}</Text>
+        {!item.can_update ? <Text style={styles.readOnlyText}>SOLO LECTURA</Text> : null}
       </View>
       {item.importation_reference || item.importation_id ? (
         <View style={styles.importTag}>
@@ -230,7 +170,7 @@ function ReminderCard({ item, alarm, busy, onRead }) {
           <Text style={styles.importTagText}>{importReference}</Text>
         </View>
       ) : null}
-      {alarm ? (
+      {alarm && item.can_update ? (
         <TouchableOpacity style={styles.readButton} disabled={busy} onPress={() => onRead(item)}>
           <Ionicons name="checkmark-done-outline" size={18} color={COLORS.white} />
           <Text style={styles.readButtonText}>Marcar aviso como leído</Text>
@@ -246,6 +186,16 @@ function ReminderModal({ imports, visible, busy, onClose, onCreate }) {
   const [description, setDescription] = useState("");
   const [priority, setPriority] = useState("Media");
   const [remindAt, setRemindAt] = useState(newReminderDate);
+  const [clientReference, setClientReference] = useState(newClientReference);
+  const previousVisible = useRef(false);
+
+  useEffect(() => {
+    if (visible && !previousVisible.current) {
+      setClientReference(newClientReference());
+      setRemindAt(newReminderDate());
+    }
+    previousVisible.current = visible;
+  }, [visible]);
 
   const selectedImport = imports.find((item) => item.reference === selectedReference) || imports[0];
 
@@ -266,6 +216,7 @@ function ReminderModal({ imports, visible, busy, onClose, onCreate }) {
       description: description.trim(),
       priority,
       remindAt: date.toISOString(),
+      clientReference,
     });
   };
 
@@ -340,7 +291,7 @@ function ReminderModal({ imports, visible, busy, onClose, onCreate }) {
   );
 }
 
-export default function TasksScreen({ imports, session, onSessionChange }) {
+export default function TasksScreen({ imports, session }) {
   const [activeFilter, setActiveFilter] = useState("tasks");
   const [tasks, setTasks] = useState([]);
   const [reminders, setReminders] = useState([]);
@@ -349,119 +300,91 @@ export default function TasksScreen({ imports, session, onSessionChange }) {
   const [refreshing, setRefreshing] = useState(false);
   const [showCreate, setShowCreate] = useState(false);
   const [rowBusy, setRowBusy] = useState(null);
+  const [online, setOnline] = useState(false);
+  const [lastSync, setLastSync] = useState(null);
   const sessionRef = useRef(session);
+  const requestInProgress = useRef(false);
 
   useEffect(() => {
     sessionRef.current = session;
   }, [session]);
 
-  const callWithRefresh = async (operation) => {
-    const currentSession = sessionRef.current;
-    try {
-      return await operation(currentSession.access_token);
-    } catch (error) {
-      if (error?.status !== 401 || !currentSession.refresh_token) throw error;
-      const renewed = await refresh(currentSession.refresh_token);
-      const nextSession = { ...currentSession, ...renewed };
-      sessionRef.current = nextSession;
-      onSessionChange(nextSession);
-      return operation(nextSession.access_token);
-    }
-  };
-
-  const loadData = async ({ quiet = false } = {}) => {
-    if (!session?.access_token) return;
+  const loadData = async ({ quiet = false, silent = false } = {}) => {
+    const token = sessionRef.current?.accessToken;
+    if (!token || requestInProgress.current) return;
+    requestInProgress.current = true;
     if (quiet) setRefreshing(true);
     else setBusy(true);
     try {
-      const nextTasks = await callWithRefresh(listAllTasks);
-      const nextReminders = await callWithRefresh(listAllReminders);
-      const nextAlarms = await callWithRefresh(listAllAlarms);
+      const [, nextTasks, nextReminders, nextAlarms] = await Promise.all([
+        health(token),
+        listAllTasks(token),
+        listAllReminders(token),
+        listAllAlarms(token),
+      ]);
       setTasks(nextTasks);
       setReminders(nextReminders);
       setAlarms(nextAlarms);
+      setOnline(true);
+      setLastSync(new Date());
     } catch (error) {
-      if (error?.status === 401) onSessionChange(null);
-      Alert.alert("No se pudo actualizar la agenda", getErrorMessage(error));
+      setOnline(false);
+      if (!silent) Alert.alert("No se pudo actualizar la agenda", getErrorMessage(error));
     } finally {
       setBusy(false);
       setRefreshing(false);
+      requestInProgress.current = false;
     }
   };
 
   useEffect(() => {
-    if (session?.access_token) loadData();
-    // La carga inicial cambia únicamente al iniciar o cerrar sesión.
+    if (session?.accessToken) loadData();
+    // La pantalla se monta al abrir Agenda y consulta inmediatamente el servidor.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [Boolean(session?.access_token)]);
+  }, [Boolean(session?.accessToken)]);
 
   useEffect(() => {
-    if (!session?.access_token) return undefined;
-    let requestInProgress = false;
-    const timer = setInterval(async () => {
-      if (requestInProgress) return;
-      requestInProgress = true;
-      try {
-        const nextAlarms = await callWithRefresh(listAllAlarms);
-        setAlarms(nextAlarms);
-      } catch {
-        // El refresco manual muestra el error; el sondeo silencioso se reintentará.
-      } finally {
-        requestInProgress = false;
-      }
-    }, 60000);
+    if (!session?.accessToken) return undefined;
+    const timer = setInterval(() => loadData({ quiet: true, silent: true }), 15000);
 
     return () => clearInterval(timer);
-    // El sondeo se activa únicamente mientras hay una sesión abierta.
+    // Sincronización completa únicamente mientras la pantalla está activa.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [Boolean(session?.access_token)]);
+  }, [Boolean(session?.accessToken)]);
 
-  const handleLogin = async (email, password) => {
+  const handleCreate = async ({ importation, title, description, priority, remindAt, clientReference }) => {
     setBusy(true);
     try {
-      const nextSession = await login(email, password);
-      onSessionChange(nextSession);
-    } catch (error) {
-      Alert.alert("No se pudo iniciar sesión", getErrorMessage(error));
-      setBusy(false);
-    }
-  };
-
-  const handleLogout = async () => {
-    setBusy(true);
-    try {
-      await logout(sessionRef.current.access_token);
-    } catch {
-      // La sesión local se elimina aunque el servidor ya no acepte el token.
-    } finally {
-      setTasks([]);
-      setReminders([]);
-      setAlarms([]);
-      setBusy(false);
-      onSessionChange(null);
-    }
-  };
-
-  const handleCreate = async ({ importation, title, description, priority, remindAt }) => {
-    setBusy(true);
-    try {
-      const taskResponse = await callWithRefresh((token) => createTask(token, {
+      const token = sessionRef.current?.accessToken;
+      const taskResponse = await createTask(token, {
         title,
         ...(description ? { description } : {}),
+        category: "Importaciones",
         priority,
         completed: false,
+        client_reference: clientReference,
         due_at: remindAt,
-        importation_id: importation.reference,
-        importation_reference: importation.bl,
-      }));
+        importation_id: String(importation.id),
+        importation_reference: importation.reference || importation.bl,
+      });
       const task = taskResponse?.data;
       if (!task?.id) throw new Error("La API creó la tarea sin devolver su identificador.");
 
+      const confirmedTask = (await getTask(token, task.id))?.data;
+      if (Number(confirmedTask?.id) !== Number(task.id)) {
+        throw new Error("No fue posible confirmar la tarea guardada en el servidor externo.");
+      }
+
       try {
-        await callWithRefresh((token) => createReminder(token, {
-          task_id: task.id,
-          remind_at: remindAt,
-        }));
+        const currentReminders = await listAllReminders(token);
+        const existing = currentReminders.find((item) =>
+          Number(item.task_id) === Number(task.id)
+          && sameInstant(item.remind_at, remindAt)
+        );
+        if (!existing) {
+          const reminderResponse = await createReminder(token, { task_id: task.id, remind_at: remindAt });
+          if (!reminderResponse?.data?.id) throw new Error("El servidor no confirmó el recordatorio.");
+        }
       } catch (error) {
         Alert.alert(
           "Tarea creada sin recordatorio",
@@ -474,7 +397,7 @@ export default function TasksScreen({ imports, session, onSessionChange }) {
 
       setShowCreate(false);
       await loadData({ quiet: true });
-      Alert.alert("Recordatorio registrado", `Quedó asociado a ${importation.reference} · ${importation.bl}.`);
+      Alert.alert("Guardado confirmado", `La tarea #${task.id} y su recordatorio quedaron en la base de datos externa.`);
     } catch (error) {
       Alert.alert("No se pudo registrar", getErrorMessage(error));
     } finally {
@@ -483,9 +406,10 @@ export default function TasksScreen({ imports, session, onSessionChange }) {
   };
 
   const handleToggleTask = async (task) => {
+    if (!task.can_update) return;
     setRowBusy(`task-${task.id}`);
     try {
-      await callWithRefresh((token) => updateTask(token, task.id, { completed: !task.completed }));
+      await updateTask(sessionRef.current.accessToken, task.id, { completed: !task.completed });
       await loadData({ quiet: true });
     } catch (error) {
       Alert.alert("No se pudo actualizar la tarea", getErrorMessage(error));
@@ -495,9 +419,10 @@ export default function TasksScreen({ imports, session, onSessionChange }) {
   };
 
   const handleReadAlarm = async (alarm) => {
+    if (!alarm.can_update) return;
     setRowBusy(`alarm-${alarm.id}`);
     try {
-      await callWithRefresh((token) => updateReminder(token, alarm.id, { read: true }));
+      await updateReminder(sessionRef.current.accessToken, alarm.id, { read: true });
       await loadData({ quiet: true });
     } catch (error) {
       Alert.alert("No se pudo reconocer la alarma", getErrorMessage(error));
@@ -512,7 +437,7 @@ export default function TasksScreen({ imports, session, onSessionChange }) {
     return tasks;
   }, [activeFilter, tasks, reminders, alarms]);
 
-  if (!session?.access_token) return <LoginPanel busy={busy} onLogin={handleLogin} />;
+  if (!session?.accessToken) return null;
 
   return (
     <View style={styles.screen}>
@@ -528,10 +453,10 @@ export default function TasksScreen({ imports, session, onSessionChange }) {
               <View style={styles.headerText}>
                 <Text style={styles.eyebrow}>API · AGENDA OPERATIVA</Text>
                 <Text style={styles.title}>Tareas y alertas</Text>
-                <Text style={styles.subtitle}>Sincronización en línea con tus importaciones</Text>
+                <Text style={styles.subtitle}>Sincronización en línea cada 15 segundos</Text>
               </View>
-              <TouchableOpacity style={styles.iconButton} disabled={busy} onPress={handleLogout}>
-                <Ionicons name="log-out-outline" size={22} color={COLORS.ink} />
+              <TouchableOpacity style={styles.iconButton} disabled={busy} onPress={() => loadData({ quiet: true })}>
+                <Ionicons name={online ? "cloud-done-outline" : "cloud-offline-outline"} size={22} color={online ? COLORS.green : COLORS.red} />
               </TouchableOpacity>
             </View>
 
@@ -570,7 +495,10 @@ export default function TasksScreen({ imports, session, onSessionChange }) {
                 </TouchableOpacity>
               ))}
             </View>
-            <Text style={styles.resultText}>{data.length} registros cargados · todas las páginas</Text>
+            <Text style={styles.resultText}>
+              {data.length} registros · todas las páginas · {online ? `en línea${lastSync ? ` · ${formatDate(lastSync)}` : ""}` : "sin conexión"}
+            </Text>
+            <Text style={styles.endpoint} numberOfLines={1}>{TASKS_API_URL}</Text>
           </>
         )}
         renderItem={({ item }) => activeFilter === "tasks" ? (
@@ -657,6 +585,7 @@ const styles = StyleSheet.create({
   badgeText: { fontSize: 9, fontWeight: "800" },
   cardMetaRow: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 11 },
   cardMeta: { color: COLORS.muted, fontSize: 10 },
+  readOnlyText: { marginLeft: "auto", color: COLORS.muted, fontSize: 7, fontWeight: "800", letterSpacing: 0.5 },
   importTag: { alignSelf: "flex-start", flexDirection: "row", alignItems: "center", gap: 5, backgroundColor: "#EAF4FC", borderRadius: 10, paddingHorizontal: 8, paddingVertical: 5, marginTop: 10 },
   importTagText: { color: COLORS.blue, fontSize: 9, fontWeight: "800" },
   reminderIcon: { width: 42, height: 42, borderRadius: 13, alignItems: "center", justifyContent: "center" },

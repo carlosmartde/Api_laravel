@@ -27,6 +27,12 @@ return [
         'password_client_secret' => env('PASSPORT_PASSWORD_CLIENT_SECRET'),
     ],
 
+    'sistema_b' => [
+        'url' => rtrim(env('SISTEMA_B_API_URL', 'https://carlos-tareas-api.onrender.com/api/v1'), '/'),
+        'token' => env('SISTEMA_B_API_TOKEN'),
+        'timeout' => (int) env('SISTEMA_B_API_TIMEOUT', 15),
+    ],
+
     'ses' => [
         'key' => env('AWS_ACCESS_KEY_ID'),
         'secret' => env('AWS_SECRET_ACCESS_KEY'),
